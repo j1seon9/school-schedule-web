@@ -1,0 +1,199 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: "Segoe UI", "Noto Sans KR", sans-serif;
+}
+
+.dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar h1 {
+  margin: 0;
+}
+
+.topbar a {
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+.panel {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.auth-grid input,
+.auth-grid button,
+#noticeInput,
+.row button {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+.auth-grid button,
+.row button {
+  background: #1d4ed8;
+  cursor: pointer;
+}
+
+.auth-grid button:hover,
+.row button:hover {
+  filter: brightness(1.1);
+}
+
+#logoutBtn {
+  background: #475569;
+}
+
+#authMessage,
+#noticeMessage,
+#ddosMeta {
+  margin: 10px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+#authMessage.error,
+#noticeMessage.error {
+  color: #fca5a5;
+}
+
+#authMessage.ok,
+#noticeMessage.ok {
+  color: #86efac;
+}
+
+.status-grid {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.status-card {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+
+.status-card span {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.chart-wrap {
+  min-height: 260px;
+}
+
+#noticeInput {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+}
+
+.row {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#noticeList,
+#ddosList {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+#noticeList li,
+#ddosList li {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 0;
+}
+
+.notice-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.notice-main {
+  flex: 1;
+}
+
+.notice-date {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.notice-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.notice-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.notice-actions button {
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.notice-edit {
+  background: #166534;
+}
+
+.notice-delete {
+  background: #991b1b;
+}
+
+@media (max-width: 900px) {
+  .auth-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
