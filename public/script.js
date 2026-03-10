@@ -1,5 +1,9 @@
 const qs = (id) => document.getElementById(id);
 const loadingEl = qs("loading");
+const favoriteListEl = qs("favoriteList");
+const favoriteSaveBtnEl = qs("favoriteSaveBtn");
+const favoriteEmptyEl = qs("favoriteEmpty");
+const searchBtnEl = qs("searchBtn");
 
 function showLoading() {
   loadingEl?.classList.remove("hidden");
@@ -230,6 +234,8 @@ function setSelectedSchool(school) {
   }
 
   localStorage.setItem("favoriteSchool", JSON.stringify(school));
+  persistSearchState();
+  updateSearchButtonState();
 }
 
 function loadFavoriteSchool() {
@@ -242,6 +248,282 @@ function loadFavoriteSchool() {
   } catch {
     localStorage.removeItem("favoriteSchool");
   }
+}
+
+const SEARCH_STATE_KEY = "search.state.v1";
+
+function buildSearchState() {
+  return {
+    schoolName: String(qs("schoolName")?.value || "").trim(),
+    grade: String(qs("grade")?.value || "").trim(),
+    classNo: String(qs("classNo")?.value || "").trim(),
+    weekStartDate: String(qs("weekStartDate")?.value || "").trim(),
+    mealMonthDate: String(qs("mealMonthDate")?.value || "").trim()
+  };
+}
+
+function persistSearchState() {
+  try {
+    const state = buildSearchState();
+    localStorage.setItem(SEARCH_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function applySearchState() {
+  const raw = localStorage.getItem(SEARCH_STATE_KEY);
+  if (!raw) return;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return;
+
+    const schoolNameEl = qs("schoolName");
+    const gradeEl = qs("grade");
+    const classNoEl = qs("classNo");
+    const weekStartDateEl = qs("weekStartDate");
+    const mealMonthDateEl = qs("mealMonthDate");
+
+    if (schoolNameEl && parsed.schoolName) schoolNameEl.value = String(parsed.schoolName);
+    if (gradeEl && parsed.grade) gradeEl.value = String(parsed.grade);
+    if (classNoEl && parsed.classNo) classNoEl.value = String(parsed.classNo);
+    if (weekStartDateEl && parsed.weekStartDate) weekStartDateEl.value = String(parsed.weekStartDate);
+    if (mealMonthDateEl && parsed.mealMonthDate) mealMonthDateEl.value = String(parsed.mealMonthDate);
+  } catch {
+    localStorage.removeItem(SEARCH_STATE_KEY);
+  }
+}
+
+function bindSearchStateEvents() {
+  const fields = [
+    qs("schoolName"),
+    qs("grade"),
+    qs("classNo"),
+    qs("weekStartDate"),
+    qs("mealMonthDate")
+  ];
+
+  fields.forEach((field) => {
+    if (!field) return;
+    field.addEventListener("input", () => {
+      persistSearchState();
+      updateSearchButtonState();
+    });
+    field.addEventListener("change", () => {
+      persistSearchState();
+      updateSearchButtonState();
+    });
+  });
+}
+
+const FAVORITE_KEY = "favorite.list.v1";
+const FAVORITE_LIMIT = 3;
+
+function getSavedSchool() {
+  const raw = localStorage.getItem("favoriteSchool");
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed?.schoolCode || !parsed?.officeCode) return null;
+    return {
+      name: String(parsed.name || "").trim(),
+      schoolCode: String(parsed.schoolCode || "").trim(),
+      officeCode: String(parsed.officeCode || "").trim(),
+      officeName: String(parsed.officeName || "").trim(),
+      type: String(parsed.type || "").trim()
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildFavoriteEntry() {
+  const { schoolCode, officeCode, grade, classNo } = getSelectedClassInfo();
+  if (!schoolCode || !officeCode || !grade || !classNo) return null;
+
+  const savedSchool = getSavedSchool();
+  const fallbackSchool = {
+    name: String(qs("schoolName")?.value || "").trim(),
+    schoolCode,
+    officeCode,
+    officeName: "",
+    type: String(qs("schoolType")?.value || "").trim()
+  };
+
+  const school = savedSchool?.schoolCode === schoolCode && savedSchool?.officeCode === officeCode
+    ? savedSchool
+    : fallbackSchool;
+
+  return {
+    id: `${schoolCode}|${officeCode}|${grade}|${classNo}`,
+    school,
+    grade,
+    classNo,
+    createdAt: Date.now()
+  };
+}
+
+function normalizeFavorite(item) {
+  if (!item || typeof item !== "object") return null;
+  const school = item.school || {};
+  const schoolCode = String(school.schoolCode || "").trim();
+  const officeCode = String(school.officeCode || "").trim();
+  const grade = String(item.grade || "").trim();
+  const classNo = String(item.classNo || "").trim();
+  if (!schoolCode || !officeCode || !grade || !classNo) return null;
+
+  return {
+    id: String(item.id || `${schoolCode}|${officeCode}|${grade}|${classNo}`),
+    school: {
+      name: String(school.name || "").trim(),
+      schoolCode,
+      officeCode,
+      officeName: String(school.officeName || "").trim(),
+      type: String(school.type || "").trim()
+    },
+    grade,
+    classNo,
+    createdAt: Number(item.createdAt || Date.now())
+  };
+}
+
+function readFavorites() {
+  const raw = localStorage.getItem(FAVORITE_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => normalizeFavorite(item))
+      .filter(Boolean)
+      .slice(0, FAVORITE_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function writeFavorites(list) {
+  localStorage.setItem(FAVORITE_KEY, JSON.stringify(list.slice(0, FAVORITE_LIMIT)));
+}
+
+function renderFavorites() {
+  if (!favoriteListEl) return;
+  const favorites = readFavorites();
+  favoriteListEl.innerHTML = "";
+
+  if (favoriteEmptyEl) {
+    favoriteEmptyEl.classList.toggle("hidden", favorites.length > 0);
+  }
+
+  favorites.forEach((fav) => {
+    const li = document.createElement("li");
+    li.className = "favorite-item";
+
+    const meta = document.createElement("div");
+    meta.className = "favorite-meta";
+
+    const title = document.createElement("div");
+    title.className = "favorite-title";
+    const schoolName = fav.school?.name || "학교";
+    title.textContent = `${schoolName} ${fav.grade}학년 ${fav.classNo}반`;
+
+    const sub = document.createElement("div");
+    sub.className = "favorite-sub";
+    const subParts = [];
+    if (fav.school?.type) subParts.push(fav.school.type);
+    if (fav.school?.officeName) subParts.push(fav.school.officeName);
+    if (subParts.length === 0) subParts.push(fav.school?.schoolCode || "");
+    sub.textContent = subParts.filter(Boolean).join(" / ");
+
+    meta.appendChild(title);
+    meta.appendChild(sub);
+
+    const actions = document.createElement("div");
+    actions.className = "favorite-actions";
+
+    const loadBtn = document.createElement("button");
+    loadBtn.type = "button";
+    loadBtn.textContent = "불러오기";
+    loadBtn.addEventListener("click", async () => {
+      applyFavorite(fav);
+      await autoQuery();
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "삭제";
+    removeBtn.classList.add("secondary");
+    removeBtn.addEventListener("click", () => {
+      removeFavorite(fav.id);
+    });
+
+    actions.appendChild(loadBtn);
+    actions.appendChild(removeBtn);
+
+    li.appendChild(meta);
+    li.appendChild(actions);
+    favoriteListEl.appendChild(li);
+  });
+}
+
+function removeFavorite(id) {
+  const current = readFavorites();
+  const next = current.filter((item) => String(item.id) !== String(id));
+  writeFavorites(next);
+  renderFavorites();
+}
+
+function saveCurrentFavorite() {
+  const entry = buildFavoriteEntry();
+  if (!entry) {
+    alert("학교, 학년, 반을 선택해 주세요.");
+    return;
+  }
+
+  const current = readFavorites();
+  const next = [entry, ...current.filter((item) => String(item.id) !== entry.id)];
+  writeFavorites(next);
+  renderFavorites();
+}
+
+function applyFavorite(fav) {
+  if (fav?.school) setSelectedSchool(fav.school);
+
+  const gradeEl = qs("grade");
+  const classNoEl = qs("classNo");
+  if (gradeEl) gradeEl.value = fav.grade || "";
+  if (classNoEl) classNoEl.value = fav.classNo || "";
+
+  persistSearchState();
+  updateSearchButtonState();
+}
+
+function updateSearchButtonState() {
+  if (!searchBtnEl) return;
+  const { grade } = getSelectedClassInfo();
+  searchBtnEl.disabled = !grade;
+}
+
+function handleSearchClick() {
+  const { schoolCode, officeCode, grade, classNo } = getSelectedClassInfo();
+  if (!grade) {
+    alert("학년을 입력해 주세요.");
+    return;
+  }
+  if (!schoolCode || !officeCode) {
+    alert("학교를 먼저 선택해 주세요.");
+    return;
+  }
+  if (!classNo) {
+    alert("반을 입력해 주세요.");
+    return;
+  }
+
+  persistSearchState();
+  autoQuery();
 }
 
 function applyTheme(theme) {
@@ -562,8 +844,14 @@ window.loadMonthlyMeal = loadMonthlyMeal;
 document.addEventListener("DOMContentLoaded", async () => {
   initTheme();
   initSchoolSearchEvents();
-  setDefaultDates();
+  bindSearchStateEvents();
+  applySearchState();
   loadFavoriteSchool();
+  renderFavorites();
+  setDefaultDates();
+  updateSearchButtonState();
+  favoriteSaveBtnEl?.addEventListener("click", saveCurrentFavorite);
+  searchBtnEl?.addEventListener("click", handleSearchClick);
   await loadNotices();
   setInterval(loadNotices, 60_000);
   if (hasSelectedSchool()) {
