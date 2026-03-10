@@ -28,6 +28,118 @@ function noDashYmd(value) {
   return String(value || "").replace(/-/g, "");
 }
 
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function normalizeYmd(value) {
+  const digits = String(value || "").replace(/[^0-9]/g, "");
+  return digits.length === 8 ? digits : "";
+}
+
+function toYmd(date) {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getWeekDateKeys(startDateValue) {
+  const startKey = normalizeYmd(startDateValue);
+  if (!startKey) return [];
+
+  const start = new Date(
+    Number(startKey.slice(0, 4)),
+    Number(startKey.slice(4, 6)) - 1,
+    Number(startKey.slice(6, 8))
+  );
+
+  return Array.from({ length: 5 }, (_, index) => {
+    const current = new Date(start);
+    current.setDate(start.getDate() + index);
+    return toYmd(current);
+  });
+}
+
+function formatWeeklyDateLabel(dateValue) {
+  const key = normalizeYmd(dateValue);
+  if (!key) return String(dateValue || "");
+
+  const year = Number(key.slice(0, 4));
+  const month = Number(key.slice(4, 6));
+  const day = Number(key.slice(6, 8));
+  const parsed = new Date(year, month - 1, day);
+  const weekday = WEEKDAY_LABELS[parsed.getDay()] || "";
+  return `${month}/${day} (${weekday})`;
+}
+
+function renderWeeklyGrid(weeklyGridEl, rows, startDate) {
+  weeklyGridEl.innerHTML = "";
+
+  const groupedByDate = new Map();
+  const weekDateKeys = getWeekDateKeys(startDate);
+  weekDateKeys.forEach((dateKey) => groupedByDate.set(dateKey, []));
+
+  const sorted = [...rows].sort((a, b) => {
+    const aDate = normalizeYmd(a.date);
+    const bDate = normalizeYmd(b.date);
+    if (aDate !== bDate) return aDate.localeCompare(bDate);
+    return Number(a.period) - Number(b.period);
+  });
+
+  sorted.forEach((item) => {
+    const dateKey = normalizeYmd(item.date);
+    if (!dateKey) return;
+
+    if (!groupedByDate.has(dateKey)) {
+      groupedByDate.set(dateKey, []);
+    }
+    groupedByDate.get(dateKey).push(item);
+  });
+
+  const orderedDateKeys = weekDateKeys.length > 0
+    ? weekDateKeys
+    : [...groupedByDate.keys()].sort((a, b) => a.localeCompare(b));
+
+  orderedDateKeys.forEach((dateKey) => {
+    const dayEl = document.createElement("section");
+    dayEl.className = "weekly-day";
+
+    const titleEl = document.createElement("h3");
+    titleEl.className = "weekly-day-title";
+    titleEl.textContent = formatWeeklyDateLabel(dateKey);
+    dayEl.appendChild(titleEl);
+
+    const items = groupedByDate.get(dateKey) || [];
+    if (items.length === 0) {
+      const emptyEl = document.createElement("div");
+      emptyEl.className = "weekly-day-empty";
+      emptyEl.textContent = "No classes";
+      dayEl.appendChild(emptyEl);
+      weeklyGridEl.appendChild(dayEl);
+      return;
+    }
+
+    const listEl = document.createElement("ul");
+    listEl.className = "weekly-day-list";
+
+    items.forEach((item) => {
+      const listItemEl = document.createElement("li");
+      listItemEl.className = "weekly-day-item";
+
+      const periodEl = document.createElement("span");
+      periodEl.className = "weekly-day-period";
+      periodEl.textContent = `${item.period}P`;
+
+      const subjectEl = document.createElement("span");
+      subjectEl.className = "weekly-day-subject";
+      subjectEl.textContent = String(item.subject || "-");
+
+      listItemEl.appendChild(periodEl);
+      listItemEl.appendChild(subjectEl);
+      listEl.appendChild(listItemEl);
+    });
+
+    dayEl.appendChild(listEl);
+    weeklyGridEl.appendChild(dayEl);
+  });
+}
+
 function splitMealMenu(rawMenu) {
   const normalized = String(rawMenu || "")
     .replace(/&lt;\s*\/?br\s*\/?&gt;/gi, "\n")
@@ -311,19 +423,7 @@ async function loadWeekly() {
     const data = await response.json();
     const weeklyGridEl = qs("weeklyGrid");
     if (!weeklyGridEl) return;
-
-    if (!Array.isArray(data) || data.length === 0) {
-      weeklyGridEl.innerHTML = "<div>주간 시간표 정보 없음</div>";
-      return;
-    }
-
-    const sorted = [...data].sort((a, b) => {
-      if (a.date !== b.date) return String(a.date).localeCompare(String(b.date));
-      return Number(a.period) - Number(b.period);
-    });
-    weeklyGridEl.innerHTML = sorted
-      .map((item) => `<div>${item.date}<br>${item.period}교시 ${item.subject}</div>`)
-      .join("");
+    renderWeeklyGrid(weeklyGridEl, Array.isArray(data) ? data : [], startDate);
   } finally {
     hideLoading();
   }
