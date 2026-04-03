@@ -1,6 +1,6 @@
 {
   "name": "school-schedule-app",
-  "version": "2.0.0",
+  "version": "2.1",
   "description": "학교 시간표 및 급식 웹앱",
   "type": "module",
   "scripts": {
