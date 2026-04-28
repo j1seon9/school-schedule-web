@@ -1,0 +1,962 @@
+
+:root {
+  --main-color: #ff7f50;
+  --bg-color: #fff8f2;
+  --card-bg: #fff;
+  --muted: #666;
+  --text-color: #1f2937;
+  --border-color: #e5e7eb;
+  --card2-bg: #ffffebcd;
+}
+
+:root[data-theme="dark"] {
+  --bg-color: #121212;
+  --card-bg: #1e1e1e;
+  --main-color: #ff9f68;
+  --muted: #aaa;
+  --text-color: #e5e7eb;
+  --border-color: #374151;
+  --card2-bg: #3D3938;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg-color);
+  color: var(--text-color);
+  -webkit-text-size-adjust: 100%;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: clamp(18px, 4.3vw, 30px);
+  line-height: 1.2;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  background: #334155;
+  color: #fff;
+  font-weight: 700;
+}
+
+.card {
+  background: var(--card-bg);
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.card2 {
+  background: var(--card2-bg);
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid black;
+}
+
+input,
+button {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+input {
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: inherit;
+}
+
+button {
+  border: none;
+  background: var(--main-color);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.row > * {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.weekly-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekly-day {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--card-bg);
+}
+
+.weekly-day-title {
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.weekly-day-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.weekly-day-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.weekly-day-period {
+  font-weight: 700;
+  color: var(--main-color);
+}
+
+.weekly-day-subject {
+  font-size: 14px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.weekly-day-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.calendar-scroll {
+  overflow-x: hidden;
+}
+
+.calendar-grid,
+.calendar-body {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.calendar-header div {
+  text-align: center;
+  font-weight: 700;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  padding: 6px 4px;
+}
+
+.calendar-body > div {
+  min-height: 96px;
+  border: 1px solid var(--border-color);
+  padding: 4px;
+}
+
+.calendar-day {
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+
+.calendar-day strong {
+  display: inline-block;
+  min-width: 24px;
+  text-align: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-bottom: 6px;
+}
+
+.calendar-day.is-today {
+  border: 2px solid var(--main-color);
+  box-shadow: 0 0 0 2px rgba(255, 127, 80, 0.2);
+}
+
+.calendar-day.is-today strong {
+  background: var(--main-color);
+  color: #fff;
+}
+
+.calendar-meal-grid {
+  display: grid;
+  gap: 4px;
+}
+
+.calendar-meal-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: inherit;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 4px 6px;
+  word-break: break-word;
+}
+
+.calendar-meal-item:hover {
+  background: rgba(255, 127, 80, 0.12);
+}
+
+.calendar-meal-empty {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.today-meal {
+  margin-top: 8px;
+  border: 1px solid rgba(255, 127, 80, 0.55);
+  border-radius: 10px;
+  background: rgba(255, 127, 80, 0.08);
+  padding: 10px;
+}
+
+.today-meal-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--main-color);
+  border-radius: 999px;
+  padding: 4px 10px;
+  margin-bottom: 8px;
+}
+
+.meal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.meal-item {
+  margin: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.meal-item:hover {
+  background: rgba(255, 127, 80, 0.12);
+}
+
+.meal-empty {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.loading {
+  text-align: center;
+  font-weight: 700;
+}
+
+.hidden {
+  display: none;
+}
+
+.notice-board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.notice-board li {
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 0;
+}
+
+.favorites-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.favorites-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.favorites-header button {
+  width: auto;
+  margin: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.favorite-list {
+  list-style: none;
+  margin: 10px 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.favorite-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+}
+
+.favorite-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.favorite-title {
+  font-weight: 700;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.favorite-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.favorite-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.favorite-actions button {
+  width: auto;
+  min-height: 34px;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.favorite-actions .secondary {
+  background: #475569;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.48);
+  padding: 16px;
+  z-index: 999;
+}
+
+.modal[aria-hidden="false"] {
+  display: flex;
+}
+
+.modal-content {
+  width: min(560px, 100%);
+  max-height: 80vh;
+  overflow: auto;
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.modal-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#schoolList {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+#schoolList li {
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#schoolList li:hover {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.action-bar {
+  display: none;
+}
+
+/* Desktop layout */
+@media (min-width: 769px) {
+  .container {
+    padding: 16px 16px 24px;
+  }
+
+  .header {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .row > * {
+    flex: 1 1 180px;
+  }
+
+  .weekly-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .calendar-scroll {
+    overflow-x: hidden;
+  }
+
+  .calendar-grid,
+  .calendar-body {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .action-bar {
+    display: none;
+  }
+}
+
+/* Mobile layout */
+@media (max-width: 768px) {
+  .container {
+    padding: 10px 10px calc(82px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .admin-link {
+    min-height: 44px;
+  }
+
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+  }
+
+  .row > * {
+    flex: none;
+    width: 100%;
+  }
+
+  .weekly-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .calendar-grid,
+  .calendar-body {
+    grid-template-columns: repeat(7, minmax(84px, 1fr));
+    min-width: 620px;
+  }
+
+  .meal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal {
+    padding: 8px;
+  }
+
+  .modal-content {
+    max-height: 86vh;
+    border-radius: 10px;
+  }
+
+  .action-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    gap: 6px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: var(--card-bg);
+    border-top: 1px solid var(--border-color);
+  }
+
+  .action-bar button {
+    margin: 0;
+    min-height: 46px;
+    border-radius: 10px;
+    flex: 1;
+  }
+}
+
+/* ── 개인정보처리방침 페이지  ─────────────────── */
+
+.privacy-page {
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+.privacy-topbar {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.privacy-topbar-inner {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.privacy-topbar-logo {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--main-color);
+}
+
+.privacy-topbar-link {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--main-color);
+  text-decoration: none;
+}
+
+.privacy-topbar-link:hover {
+  text-decoration: underline;
+}
+
+.privacy-wrap {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+/* 히어로 */
+.privacy-hero {
+  background: linear-gradient(135deg, var(--main-color) 0%, #ff9f68 100%);
+  border-radius: 16px;
+  padding: 36px 32px;
+  margin-bottom: 24px;
+  color: #fff;
+}
+
+.privacy-hero-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+
+.privacy-hero-title {
+  font-size: clamp(20px, 4vw, 28px);
+  font-weight: 700;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.privacy-hero-sub {
+  font-size: 13px;
+  opacity: 0.85;
+  margin: 0;
+}
+
+/* 목차 */
+.privacy-toc-card {
+  background: var(--card-bg);
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  border: 1px solid var(--border-color);
+}
+
+.privacy-toc-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.privacy-toc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.privacy-toc-item {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--main-color);
+  text-decoration: none;
+  background: rgba(255, 127, 80, 0.08);
+  transition: background 0.15s;
+}
+
+.privacy-toc-item:hover {
+  background: rgba(255, 127, 80, 0.18);
+}
+
+/* 섹션 */
+.privacy-section {
+  background: var(--card-bg);
+  border-radius: 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.privacy-section-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(255, 127, 80, 0.04);
+}
+
+.privacy-section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--main-color);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.privacy-section-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-color);
+  margin: 0;
+}
+
+.privacy-section-body {
+  padding: 20px 24px;
+}
+
+.privacy-section-body p {
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--text-color);
+  margin: 0 0 12px;
+}
+
+.privacy-section-body p:last-child {
+  margin-bottom: 0;
+}
+
+.privacy-section-body ul,
+.privacy-section-body ol {
+  margin: 8px 0 12px;
+  padding-left: 20px;
+}
+
+.privacy-section-body li {
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--text-color);
+  margin-bottom: 4px;
+}
+
+/* 테이블 */
+.privacy-table-wrap {
+  overflow-x: auto;
+  margin: 12px 0;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.privacy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.privacy-table th,
+.privacy-table td {
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 14px;
+  text-align: left;
+  line-height: 1.6;
+  vertical-align: top;
+}
+
+.privacy-table tr:last-child th,
+.privacy-table tr:last-child td {
+  border-bottom: none;
+}
+
+.privacy-table thead th {
+  background: rgba(255, 127, 80, 0.08);
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.privacy-table tbody th {
+  background: rgba(255, 127, 80, 0.04);
+  font-weight: 700;
+  width: 160px;
+}
+
+/* 배지 */
+.privacy-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.privacy-badge.required {
+  background: rgba(255, 127, 80, 0.15);
+  color: var(--main-color);
+}
+
+/* 하이라이트 박스 */
+.privacy-highlight-box {
+  background: rgba(255, 127, 80, 0.08);
+  border-left: 4px solid var(--main-color);
+  border-radius: 0 10px 10px 0;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-color);
+  margin: 12px 0;
+}
+
+/* 안내 박스 */
+.privacy-notice-box {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+
+/* 권리 그리드 */
+.privacy-rights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.privacy-rights-item {
+  background: rgba(255, 127, 80, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--main-color);
+  text-align: center;
+}
+
+/* 기관 그리드 */
+.privacy-agency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.privacy-agency-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.privacy-agency-item:hover {
+  border-color: var(--main-color);
+  background: rgba(255, 127, 80, 0.06);
+}
+
+.privacy-agency-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.privacy-agency-tel {
+  font-size: 13px;
+  color: var(--main-color);
+  font-weight: 600;
+}
+
+.privacy-agency-url {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 푸터 */
+.privacy-footer {
+  text-align: center;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.privacy-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--main-color);
+  color: #fff;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  margin-bottom: 16px;
+  transition: filter 0.15s;
+}
+
+.privacy-back-btn:hover {
+  filter: brightness(1.08);
+}
+
+.privacy-footer p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .privacy-hero {
+    padding: 24px 20px;
+  }
+
+  .privacy-section-body {
+    padding: 16px;
+  }
+
+  .privacy-section-header {
+    padding: 14px 16px;
+  }
+
+  .privacy-toc-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .privacy-rights-grid,
+  .privacy-agency-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

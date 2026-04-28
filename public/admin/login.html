@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>관리자 로그인</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body class="login-page">
+  <div class="dashboard">
+    <header class="topbar">
+      <h1>관리자 로그인</h1>
+      <a href="/">서비스 화면</a>
+    </header>
+
+    <section class="panel auth-panel login-card">
+      <h2>관리자 인증</h2>
+      <div class="auth-grid auth-grid-single">
+        <input id="adminIdInput" type="text" placeholder="관리자 ID" autocomplete="username">
+        <input id="adminPasswordInput" type="password" placeholder="관리자 비밀번호" autocomplete="current-password">
+        <input id="adminKeyInput" type="password" placeholder="관리자 인증키 (선택)" autocomplete="off">
+        <button id="loginBtn" type="button">로그인</button>
+      </div>
+      <p class="login-help">인증키는 서버에 설정한 경우에만 입력하세요.</p>
+      <p id="authMessage">관리자 정보를 입력하고 로그인하세요.</p>
+    </section>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>

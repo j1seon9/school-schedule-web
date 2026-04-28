@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>관리자 페이지</title>
+  <link rel="stylesheet" href="admin.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="dashboard">
+    <header class="topbar">
+      <h1>관리자 대시보드</h1>
+      <a href="/">서비스 화면</a>
+    </header>
+
+    <section class="panel auth-panel">
+      <h2>관리자 인증</h2>
+      <div class="auth-grid">
+        <input id="adminIdInput" type="text" placeholder="관리자 ID" autocomplete="username">
+        <input id="adminPasswordInput" type="password" placeholder="관리자 비밀번호" autocomplete="current-password">
+        <input id="adminKeyInput" type="password" placeholder="관리자 인증키" autocomplete="off">
+        <button id="loginBtn" type="button">로그인 적용</button>
+        <button id="logoutBtn" type="button">로그아웃</button>
+      </div>
+      <p id="authMessage">관리자 정보를 입력하고 로그인하세요.</p>
+    </section>
+
+    <section class="status-grid">
+      <div class="status-card">총 요청<span id="totalRequests">0</span></div>
+      <div class="status-card">오늘 요청<span id="todayRequests">0</span></div>
+      <div class="status-card">CPU 로드<span id="cpuLoad">0</span></div>
+      <div class="status-card">메모리(MB)<span id="memoryUsage">0</span></div>
+      <div class="status-card">공지 개수<span id="noticeCount">0</span></div>
+    </section>
+
+    <section class="panel">
+      <h2>트래픽 추이</h2>
+      <div class="chart-wrap">
+        <canvas id="requestsChart"></canvas>
+      </div>
+    </section>
+
+    <div class="panel-grid">
+      <section class="panel">
+        <h2>DDoS 모니터</h2>
+        <p id="ddosMeta">데이터를 불러오는 중...</p>
+        <ul id="ddosList"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>공지사항 관리</h2>
+        <textarea id="noticeInput" maxlength="300" placeholder="서비스 화면에 표시할 공지사항을 입력하세요."></textarea>
+        <div class="row">
+          <button id="addNoticeBtn" type="button">공지 등록</button>
+          <span id="noticeMessage">공지 목록을 불러오는 중...</span>
+        </div>
+        <ul id="noticeList"></ul>
+      </section>
+    </div>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>
