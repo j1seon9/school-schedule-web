@@ -11,6 +11,7 @@ import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 
 dotenv.config();
+mongoose.set("strictQuery", true);
 
 const API_KEY     = (process.env.API_KEY     || "").trim();
 const PORT        = Number(process.env.PORT  || 8000);
