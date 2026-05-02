@@ -12,6 +12,7 @@
     <div class="reg-logo">
       <h1>🏫 학교 봇</h1>
       <p>Discord 봇 회원가입</p>
+      <a class="login-register-link" href="/login">이미 회원이라면 로그인</a>
     </div>
 
     <div class="reg-card">
@@ -66,7 +67,22 @@
 
         <div class="reg-privacy-status" id="privacyStatus"></div>
 
+        <div class="reg-privacy-box">
+          <strong>이용약관 주요 내용</strong><br>
+          학교 시간표·급식 정보 조회, 학교 설정 저장, Firebase 인증, Discord 연동 기능을 제공합니다.<br><br>
+          <strong>사용자 의무</strong><br>
+          본인의 인증 수단을 사용해야 하며, 타인의 정보 또는 허위 정보를 입력하면 서비스 이용이 제한될 수 있습니다.<br><br>
+          <strong>서비스 제한</strong><br>
+          포트폴리오용 서비스이므로 장애, 외부 API 변경, 운영 사정에 따라 일부 기능이 중단될 수 있습니다.<br><br>
+          자세한 내용은 <a href="/terms" target="_blank">이용약관</a>을 확인하세요.
+        </div>
+
+        <div class="reg-privacy-status" id="termsStatus"></div>
+
         <div class="reg-phone-box">
+          <label class="reg-label">인증 방법</label>
+          <button class="reg-btn reg-btn-outline reg-google-btn" id="googleAuthBtn" type="button" onclick="signInWithGoogle()" disabled>Google로 인증하기</button>
+          <div class="reg-auth-divider">또는 SMS 인증</div>
           <label class="reg-label" for="phoneNumber">휴대폰 번호 인증</label>
           <div class="reg-search-row">
             <input id="phoneNumber" type="tel" class="reg-input" value="010-2125-7920" placeholder="010-2125-7920" autocomplete="tel">
@@ -90,26 +106,41 @@
           <label for="confirmCheck">위의 내용을 확인했습니다.</label>
         </div>
         <div class="reg-agree-row">
+          <input type="checkbox" id="termsAgreeCheck" disabled>
+          <label for="termsAgreeCheck">이용약관에 동의합니다.</label>
+          <a href="/terms" target="_blank">[전문 보기]</a>
+        </div>
+        <div class="reg-agree-row">
+          <input type="checkbox" id="termsConfirmCheck" disabled>
+          <label for="termsConfirmCheck">이용약관 내용을 확인했습니다.</label>
+        </div>
+        <div class="reg-agree-row">
           <input type="checkbox" id="ageCheck">
           <label for="ageCheck">만 14세 이상입니다.</label>
         </div>
 
         <div class="reg-msg" id="step2Msg"></div>
-        <button class="reg-btn reg-btn-main" id="submitBtn" onclick="submitRegister()" disabled>가입 완료</button>
+        <button class="reg-btn reg-btn-main" id="submitBtn" onclick="submitRegister('web')" disabled>웹에서 바로 가입</button>
+        <button class="reg-btn reg-btn-outline" id="tokenSubmitBtn" onclick="submitRegister('discord')" disabled>Discord 연동 토큰 발급</button>
         <button class="reg-btn reg-btn-outline" onclick="goStep1()">이전</button>
       </div>
 
       <!-- Step 3: 토큰 발급 완료 -->
       <div class="reg-step" id="step3">
-        <div class="reg-step-title">③ 가입 완료 — 토큰 발급</div>
+        <div class="reg-step-title" id="step3Title">③ 가입 완료</div>
 
-        <div class="reg-token-box">
+        <div class="reg-success-box" id="webSuccessBox" hidden>
+          <strong>웹 회원가입이 완료되었습니다.</strong><br>
+          선택한 학교와 학년/반 정보가 서버에 암호화되어 저장되었습니다.
+        </div>
+
+        <div class="reg-token-box" id="tokenResultBox" hidden>
           <div class="reg-token-label">Discord 봇 인증 토큰</div>
           <div class="reg-token-value" id="tokenValue">------</div>
           <button class="reg-token-copy" onclick="copyToken()">📋 복사하기</button>
         </div>
 
-        <div class="reg-token-notice">
+        <div class="reg-token-notice" id="tokenNotice" hidden>
           Discord에서 아래 커맨드를 입력하세요:<br>
           <strong>/로그인 [토큰]</strong><br><br>
           <span class="reg-timer" id="timerEl">⏱ 5:00 후 만료</span>
@@ -118,6 +149,12 @@
 
     </div>
   </div>
+
+  <footer class="site-footer">
+    <a href="/privacy">개인정보처리방침</a>
+    <a href="/terms">이용약관</a>
+    <a href="https://discord.gg/2JbvBa2ykP" target="_blank" rel="noopener noreferrer">문의</a>
+  </footer>
 
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>

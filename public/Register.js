@@ -7,12 +7,30 @@ let firebaseAuth = null;
 let recaptchaVerifier = null;
 let phoneConfirmationResult = null;
 let firebaseIdToken = "";
+let firebaseAuthMethod = "";
+let firebaseClientConfig = null;
 const PRIVACY_READ_KEY = "schoolBotPrivacyReadAt";
+const TERMS_READ_KEY = "schoolBotTermsReadAt";
 const PRIVACY_READ_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const REDIRECTING_TO_LOCALHOST = window.location.hostname === "127.0.0.1";
+
+if (REDIRECTING_TO_LOCALHOST) {
+  const url = new URL(window.location.href);
+  url.hostname = "localhost";
+  window.location.replace(url.toString());
+}
 
 function getPrivacyReadAt() {
+  return getStoredReadAt(PRIVACY_READ_KEY);
+}
+
+function getTermsReadAt() {
+  return getStoredReadAt(TERMS_READ_KEY);
+}
+
+function getStoredReadAt(key) {
   try {
-    const value = Number(localStorage.getItem(PRIVACY_READ_KEY));
+    const value = Number(localStorage.getItem(key));
     return Number.isFinite(value) ? value : 0;
   } catch {
     return 0;
@@ -20,36 +38,63 @@ function getPrivacyReadAt() {
 }
 
 function hasReadPrivacy() {
-  const readAt = getPrivacyReadAt();
+  return isRecentReadAt(getPrivacyReadAt());
+}
+
+function hasReadTerms() {
+  return isRecentReadAt(getTermsReadAt());
+}
+
+function isRecentReadAt(readAt) {
   const now = Date.now();
   return readAt > 0 && readAt <= now + 60_000 && now - readAt <= PRIVACY_READ_MAX_AGE_MS;
 }
 
 function updatePrivacyGate() {
-  const isRead = hasReadPrivacy();
+  const isPrivacyRead = hasReadPrivacy();
+  const isTermsRead = hasReadTerms();
   const statusEl = document.getElementById("privacyStatus");
+  const termsStatusEl = document.getElementById("termsStatus");
   const agreeCheck = document.getElementById("agreeCheck");
   const confirmCheck = document.getElementById("confirmCheck");
+  const termsAgreeCheck = document.getElementById("termsAgreeCheck");
+  const termsConfirmCheck = document.getElementById("termsConfirmCheck");
 
-  if (agreeCheck) agreeCheck.disabled = !isRead;
-  if (confirmCheck) confirmCheck.disabled = !isRead;
-  if (!isRead) {
+  if (agreeCheck) agreeCheck.disabled = !isPrivacyRead;
+  if (confirmCheck) confirmCheck.disabled = !isPrivacyRead;
+  if (!isPrivacyRead) {
     if (agreeCheck) agreeCheck.checked = false;
     if (confirmCheck) confirmCheck.checked = false;
   }
 
-  if (!statusEl) return;
-  statusEl.textContent = isRead
-    ? "개인정보처리방침 전문 확인이 완료되었습니다."
-    : "개인정보처리방침 전문을 끝까지 읽은 뒤 동의할 수 있습니다.";
-  statusEl.classList.toggle("is-ready", isRead);
+  if (termsAgreeCheck) termsAgreeCheck.disabled = !isTermsRead;
+  if (termsConfirmCheck) termsConfirmCheck.disabled = !isTermsRead;
+  if (!isTermsRead) {
+    if (termsAgreeCheck) termsAgreeCheck.checked = false;
+    if (termsConfirmCheck) termsConfirmCheck.checked = false;
+  }
+
+  if (statusEl) {
+    statusEl.textContent = isPrivacyRead
+      ? "개인정보처리방침 전문 확인이 완료되었습니다."
+      : "개인정보처리방침 전문을 끝까지 읽은 뒤 동의할 수 있습니다.";
+    statusEl.classList.toggle("is-ready", isPrivacyRead);
+  }
+  if (termsStatusEl) {
+    termsStatusEl.textContent = isTermsRead
+      ? "이용약관 전문 확인이 완료되었습니다."
+      : "이용약관 전문을 끝까지 읽은 뒤 동의할 수 있습니다.";
+    termsStatusEl.classList.toggle("is-ready", isTermsRead);
+  }
   updateSubmitGate();
 }
 
 function updateSubmitGate() {
+  const canSubmit = hasReadPrivacy() && hasReadTerms() && Boolean(firebaseIdToken);
   const submitBtn = document.getElementById("submitBtn");
-  if (!submitBtn) return;
-  submitBtn.disabled = !hasReadPrivacy() || !firebaseIdToken;
+  const tokenSubmitBtn = document.getElementById("tokenSubmitBtn");
+  if (submitBtn) submitBtn.disabled = !canSubmit;
+  if (tokenSubmitBtn) tokenSubmitBtn.disabled = !canSubmit;
 }
 
 function setPhoneStatus(text, isReady = false) {
@@ -57,6 +102,20 @@ function setPhoneStatus(text, isReady = false) {
   if (!el) return;
   el.textContent = text;
   el.classList.toggle("is-ready", isReady);
+}
+
+function setFirebaseAuthToken(idToken, method, statusText) {
+  firebaseIdToken = idToken || "";
+  firebaseAuthMethod = method || "";
+  if (statusText) setPhoneStatus(statusText, Boolean(idToken));
+  updateSubmitGate();
+}
+
+function clearFirebaseAuthToken(statusText) {
+  firebaseIdToken = "";
+  firebaseAuthMethod = "";
+  if (statusText) setPhoneStatus(statusText);
+  updateSubmitGate();
 }
 
 function normalizePhoneNumber(value) {
@@ -69,9 +128,13 @@ function normalizePhoneNumber(value) {
 }
 
 async function initFirebaseAuth() {
+  if (REDIRECTING_TO_LOCALHOST) return;
+
   const sendBtn = document.getElementById("sendPhoneBtn");
+  const googleBtn = document.getElementById("googleAuthBtn");
   if (!window.firebase) {
     if (sendBtn) sendBtn.disabled = true;
+    if (googleBtn) googleBtn.disabled = true;
     setPhoneStatus("Firebase SDK를 불러오지 못했습니다. 네트워크를 확인해 주세요.");
     updateSubmitGate();
     return;
@@ -81,17 +144,45 @@ async function initFirebaseAuth() {
     const response = await fetch("/api/firebase-config", { cache: "no-store" });
     const config = await response.json();
     if (!response.ok) throw new Error(config.error || "FIREBASE_CONFIG_MISSING");
+    firebaseClientConfig = config;
 
-    if (!firebase.apps.length) firebase.initializeApp(config);
+    const firebaseConfig = {
+      apiKey: config.apiKey,
+      authDomain: config.authDomain,
+      projectId: config.projectId,
+      appId: config.appId,
+      messagingSenderId: config.messagingSenderId
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     firebaseAuth = firebase.auth();
     firebaseAuth.languageCode = "ko";
-    recaptchaVerifier = new firebase.auth.RecaptchaVerifier("recaptchaContainer", {
-      size: "normal"
-    });
-    await recaptchaVerifier.render();
-    setPhoneStatus("휴대폰 번호를 입력하고 인증 문자를 받아 주세요.");
+    if (googleBtn) googleBtn.disabled = false;
+
+    try {
+      const redirectResult = await firebaseAuth.getRedirectResult();
+      if (redirectResult?.user) {
+        const idToken = await redirectResult.user.getIdToken(true);
+        const email = redirectResult.user.email ? ` (${redirectResult.user.email})` : "";
+        setFirebaseAuthToken(idToken, "google", `Google 인증이 완료되었습니다${email}.`);
+      }
+    } catch (e) {
+      setPhoneStatus(`Google 인증 결과를 확인하지 못했습니다: ${e.message}`);
+    }
+
+    try {
+      recaptchaVerifier = new firebase.auth.RecaptchaVerifier("recaptchaContainer", {
+        size: "normal"
+      });
+      await recaptchaVerifier.render();
+      if (sendBtn) sendBtn.disabled = false;
+      if (!firebaseIdToken) setPhoneStatus("SMS 또는 Google 인증 중 하나를 완료해 주세요.");
+    } catch (e) {
+      if (sendBtn) sendBtn.disabled = true;
+      if (!firebaseIdToken) setPhoneStatus(`SMS 인증 설정을 확인해 주세요: ${e.message} Google 인증은 사용할 수 있습니다.`);
+    }
   } catch (e) {
     if (sendBtn) sendBtn.disabled = true;
+    if (googleBtn) googleBtn.disabled = true;
     setPhoneStatus(`Firebase 설정이 필요합니다: ${e.message}`);
   } finally {
     updateSubmitGate();
@@ -102,6 +193,28 @@ async function resetRecaptcha() {
   if (!recaptchaVerifier) return;
   const widgetId = await recaptchaVerifier.render();
   if (window.grecaptcha) window.grecaptcha.reset(widgetId);
+}
+
+async function signInWithGoogle() {
+  if (!firebaseAuth) return setPhoneStatus("Firebase 인증 설정을 먼저 확인해 주세요.");
+
+  const googleBtn = document.getElementById("googleAuthBtn");
+  googleBtn.disabled = true;
+  clearFirebaseAuthToken("Google 인증 페이지로 이동합니다...");
+
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    await firebaseAuth.signInWithRedirect(provider);
+  } catch (e) {
+    if (e.code === "auth/unauthorized-domain") {
+      setPhoneStatus("Google 인증 허용 도메인 문제가 있습니다. 로컬은 http://localhost:8000/register 로 접속하거나 Firebase Authorized domains에 현재 도메인을 추가해 주세요.");
+      return;
+    }
+    setPhoneStatus(`Google 인증에 실패했습니다: ${e.message}`);
+  } finally {
+    googleBtn.disabled = false;
+  }
 }
 
 async function sendPhoneCode() {
@@ -119,14 +232,17 @@ async function sendPhoneCode() {
   const sendBtn = document.getElementById("sendPhoneBtn");
   const confirmBtn = document.getElementById("confirmPhoneBtn");
   sendBtn.disabled = true;
-  firebaseIdToken = "";
-  updateSubmitGate();
+  clearFirebaseAuthToken();
   setPhoneStatus("인증 문자를 보내는 중입니다...");
 
   try {
     phoneConfirmationResult = await firebaseAuth.signInWithPhoneNumber(phoneNumber, recaptchaVerifier);
     if (confirmBtn) confirmBtn.disabled = false;
-    setPhoneStatus("인증 문자를 보냈습니다. 받은 6자리 코드를 입력해 주세요.");
+    if (firebaseClientConfig?.testPhoneAuthEnabled && phoneNumber === firebaseClientConfig.testPhoneNumber) {
+      setPhoneStatus("테스트 번호입니다. 실제 SMS는 오지 않습니다. Firebase Console에 등록한 6자리 테스트 인증번호를 입력해 주세요.");
+    } else {
+      setPhoneStatus("인증 문자를 보냈습니다. 받은 6자리 코드를 입력해 주세요.");
+    }
   } catch (e) {
     await resetRecaptcha();
     setPhoneStatus(`인증 문자 발송에 실패했습니다: ${e.message}`);
@@ -147,8 +263,8 @@ async function confirmPhoneCode() {
 
   try {
     const result = await phoneConfirmationResult.confirm(code);
-    firebaseIdToken = await result.user.getIdToken(true);
-    setPhoneStatus("휴대폰 번호 인증이 완료되었습니다.", true);
+    const idToken = await result.user.getIdToken(true);
+    setFirebaseAuthToken(idToken, "sms", "휴대폰 번호 인증이 완료되었습니다.");
   } catch (e) {
     confirmBtn.disabled = false;
     setPhoneStatus(`인증번호 확인에 실패했습니다: ${e.message}`);
@@ -223,10 +339,35 @@ function showStep(id) {
   document.getElementById(id).classList.add("active");
 }
 
-async function submitRegister() {
+function setStep3Mode(mode) {
+  const title = document.getElementById("step3Title");
+  const webSuccessBox = document.getElementById("webSuccessBox");
+  const tokenResultBox = document.getElementById("tokenResultBox");
+  const tokenNotice = document.getElementById("tokenNotice");
+
+  if (timerInterval) clearInterval(timerInterval);
+  if (mode === "discord") {
+    title.textContent = "③ 가입 완료 — 토큰 발급";
+    webSuccessBox.hidden = true;
+    tokenResultBox.hidden = false;
+    tokenNotice.hidden = false;
+    return;
+  }
+
+  title.textContent = "③ 웹 회원가입 완료";
+  webSuccessBox.hidden = false;
+  tokenResultBox.hidden = true;
+  tokenNotice.hidden = true;
+}
+
+async function submitRegister(mode = "web") {
   if (!hasReadPrivacy()) {
     updatePrivacyGate();
     return showMsg("step2Msg", "개인정보처리방침 전문을 먼저 끝까지 확인해 주세요.", "error");
+  }
+  if (!hasReadTerms()) {
+    updatePrivacyGate();
+    return showMsg("step2Msg", "이용약관 전문을 먼저 끝까지 확인해 주세요.", "error");
   }
   if (!document.getElementById("agreeCheck").checked) {
     return showMsg("step2Msg", "개인정보 수집 및 이용에 동의해주세요.", "error");
@@ -234,15 +375,24 @@ async function submitRegister() {
   if (!document.getElementById("confirmCheck").checked) {
     return showMsg("step2Msg", "위의 내용을 확인했다는 항목에 체크해주세요.", "error");
   }
+  if (!document.getElementById("termsAgreeCheck").checked) {
+    return showMsg("step2Msg", "이용약관에 동의해주세요.", "error");
+  }
+  if (!document.getElementById("termsConfirmCheck").checked) {
+    return showMsg("step2Msg", "이용약관 내용을 확인했다는 항목에 체크해주세요.", "error");
+  }
   if (!document.getElementById("ageCheck").checked) {
     return showMsg("step2Msg", "만 14세 이상인 경우에만 가입할 수 있습니다.", "error");
   }
   if (!firebaseIdToken) {
-    return showMsg("step2Msg", "휴대폰 번호 인증을 완료해 주세요.", "error");
+    return showMsg("step2Msg", "SMS 또는 Google 인증을 완료해 주세요.", "error");
   }
 
-  const btn = document.getElementById("submitBtn");
-  btn.disabled = true;
+  const isDiscordMode = mode === "discord";
+  const btn = document.getElementById(isDiscordMode ? "tokenSubmitBtn" : "submitBtn");
+  const originalText = btn.textContent;
+  document.getElementById("submitBtn").disabled = true;
+  document.getElementById("tokenSubmitBtn").disabled = true;
   btn.innerHTML = '<span class="reg-spinner"></span>처리 중...';
 
   try {
@@ -256,29 +406,38 @@ async function submitRegister() {
       classNo:    document.getElementById("classNo").value.trim(),
       privacyAgreed: document.getElementById("agreeCheck").checked,
       privacyConfirmed: document.getElementById("confirmCheck").checked,
+      termsAgreed: document.getElementById("termsAgreeCheck").checked,
+      termsConfirmed: document.getElementById("termsConfirmCheck").checked,
       ageConfirmed: document.getElementById("ageCheck").checked,
       privacyReadAt: getPrivacyReadAt(),
-      firebaseIdToken
+      termsReadAt: getTermsReadAt(),
+      firebaseIdToken,
+      firebaseAuthMethod
     };
 
-    const res = await fetch("/api/register", {
+    const res = await fetch(isDiscordMode ? "/api/register" : "/api/register/web", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
 
     const data = await res.json();
-    if (!res.ok) return showMsg("step2Msg", data.error || "오류가 발생했습니다.", "error");
+    if (!res.ok) return showMsg("step2Msg", data.message || data.error || "오류가 발생했습니다.", "error");
 
-    tokenValue = data.token;
-    document.getElementById("tokenValue").textContent = tokenValue;
-    startTimer(5 * 60);
+    setStep3Mode(isDiscordMode ? "discord" : "web");
+    if (isDiscordMode) {
+      tokenValue = data.token;
+      document.getElementById("tokenValue").textContent = tokenValue;
+      startTimer(5 * 60);
+    } else {
+      tokenValue = "";
+    }
     showStep("step3");
   } catch {
     showMsg("step2Msg", "서버 연결에 실패했습니다.", "error");
   } finally {
     updateSubmitGate();
-    btn.innerHTML = "가입 완료";
+    btn.textContent = originalText;
   }
 }
 
@@ -329,16 +488,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") searchSchool();
   });
   document.getElementById("phoneNumber").addEventListener("input", () => {
-    firebaseIdToken = "";
     phoneConfirmationResult = null;
     const confirmBtn = document.getElementById("confirmPhoneBtn");
     if (confirmBtn) confirmBtn.disabled = true;
-    setPhoneStatus("휴대폰 번호를 입력하고 인증 문자를 받아 주세요.");
-    updateSubmitGate();
+    if (firebaseAuthMethod === "google") {
+      setPhoneStatus("Google 인증이 완료되었습니다. SMS로 바꾸려면 인증 문자를 받아 주세요.", true);
+      updateSubmitGate();
+      return;
+    }
+    clearFirebaseAuthToken("휴대폰 번호를 입력하고 인증 문자를 받아 주세요.");
   });
 });
 
 window.addEventListener("focus", updatePrivacyGate);
 window.addEventListener("storage", e => {
-  if (e.key === PRIVACY_READ_KEY) updatePrivacyGate();
+  if (e.key === PRIVACY_READ_KEY || e.key === TERMS_READ_KEY) updatePrivacyGate();
 });

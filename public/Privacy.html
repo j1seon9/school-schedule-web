@@ -4,328 +4,73 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>개인정보처리방침 — 학교 봇</title>
+  <title>개인정보처리방침 - 케토 서비스</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body style="background: var(--bg-color); color: var(--text-color); margin: 0;">
+<body class="legal-page">
+  <main class="legal-wrap">
+    <a class="legal-back" href="/register">회원가입으로 돌아가기</a>
 
-  <!-- 상단 헤더 배너 -->
-  <div style="background: var(--main-color); padding: 32px 20px 28px;">
-    <div style="max-width: 780px; margin: 0 auto;">
-      <div style="font-size: 13px; color: rgba(255,255,255,0.8); margin-bottom: 8px;">🏫 학교 봇</div>
-      <h1 style="margin: 0; font-size: 26px; font-weight: 700; color: #fff;">개인정보처리방침</h1>
-      <p style="margin: 8px 0 0; font-size: 13px; color: rgba(255,255,255,0.85);">
-        시행일: 2026년 5월 1일 &nbsp;·&nbsp; 최종 수정일: 2026년 5월 1일
-      </p>
-    </div>
-  </div>
+    <header class="legal-hero">
+      <p class="legal-eyebrow">케토 서비스</p>
+      <h1>개인정보처리방침</h1>
+      <p>시행일: 2026년 5월 2일</p>
+    </header>
 
-  <div class="privacy-wrap">
-
-    <a class="privacy-back" href="/register">← 회원가입으로 돌아가기</a>
-
-    <!-- 요약 카드 -->
-    <div style="
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
-      margin-bottom: 36px;
-    ">
-      <div style="background: var(--card-bg); border-radius: 12px; padding: 16px; border-left: 4px solid var(--main-color); box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-        <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">수집 항목</div>
-        <div style="font-size: 13px; font-weight: 600; line-height: 1.6;">서버 ID, 학교코드,<br>학년·반 등</div>
-      </div>
-      <div style="background: var(--card-bg); border-radius: 12px; padding: 16px; border-left: 4px solid var(--main-color); box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-        <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">수집 목적</div>
-        <div style="font-size: 13px; font-weight: 600; line-height: 1.6;">NEIS API 조회<br>및 설정 유지</div>
-      </div>
-      <div style="background: var(--card-bg); border-radius: 12px; padding: 16px; border-left: 4px solid var(--main-color); box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-        <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">보관 기간</div>
-        <div style="font-size: 13px; font-weight: 600; line-height: 1.6;">탈퇴 또는<br>삭제 요청 시까지</div>
-      </div>
-      <div style="background: var(--card-bg); border-radius: 12px; padding: 16px; border-left: 4px solid var(--main-color); box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-        <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">보관 장소</div>
-        <div style="font-size: 13px; font-weight: 600; line-height: 1.6;">MongoDB<br>(Cloudtype)</div>
-      </div>
-    </div>
-
-    <!-- 제1조 -->
-    <div class="privacy-section">
-      <h2>제1조 (개인정보의 처리 목적)</h2>
-      <p>
-        학교 봇(이하 "서비스")은 「개인정보 보호법」 제15조에 따라 다음의 목적으로만
-        개인정보를 처리합니다. 처리하는 개인정보는 다음의 목적 이외의 용도로는 이용되지
-        않으며, 이용 목적이 변경될 시에는 별도의 동의를 받는 등 필요한 조치를 이행할 것입니다.
-      </p>
+    <section class="legal-section">
+      <h2>1. 수집하는 개인정보</h2>
+      <p>서비스는 회원가입과 학교 설정 저장을 위해 아래 정보를 수집합니다.</p>
       <ul>
-        <li>나이스(NEIS) 교육정보 개방 포털 API를 통한 시간표·급식 정보 조회</li>
-        <li>서비스 재시작 후에도 학교 설정 정보의 지속적 유지</li>
-        <li>Discord 사용자와 학교 설정 정보의 연동</li>
+        <li>학교명, 학교코드, 교육청코드, 학년, 반</li>
+        <li>Firebase 인증 식별자, 인증 방식, 휴대폰 번호 또는 Google 이메일</li>
+        <li>Discord 연동 시 Discord 사용자 ID 및 서버 ID</li>
+        <li>개인정보 및 약관 동의 일시</li>
       </ul>
-    </div>
+    </section>
 
-    <!-- 제2조 -->
-    <div class="privacy-section">
-      <h2>제2조 (처리하는 개인정보의 항목 및 수집 방법)</h2>
-      <table class="privacy-table">
-        <thead>
-          <tr>
-            <th>구분</th>
-            <th>수집 항목</th>
-            <th>수집 방법</th>
-            <th>필수 여부</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>서비스 이용 정보</td>
-            <td>Discord 서버 ID, Discord 사용자 ID</td>
-            <td>서비스 이용 시 자동 수집</td>
-            <td>필수</td>
-          </tr>
-          <tr>
-            <td>학교 설정 정보</td>
-            <td>학교명, 학교코드, 교육청코드, 학년, 반</td>
-            <td>회원가입 페이지에서 이용자 직접 입력</td>
-            <td>필수</td>
-          </tr>
-          <tr>
-            <td>동의 정보</td>
-            <td>개인정보 수집·이용 동의 일시</td>
-            <td>동의 절차 진행 시 자동 수집</td>
-            <td>필수</td>
-          </tr>
-        </tbody>
-      </table>
-      <p style="margin-top:10px; font-size:13px; color: var(--muted);">
-        ※ 서비스는 만 14세 미만 아동의 개인정보를 수집하지 않습니다.
-        만 14세 미만인 경우 법정대리인의 동의가 필요합니다.
-      </p>
-    </div>
-
-    <!-- 제3조 -->
-    <div class="privacy-section">
-      <h2>제3조 (개인정보의 처리 및 보유 기간)</h2>
-      <p>
-        서비스는 법령에 따른 개인정보 보유·이용 기간 또는 정보주체로부터 개인정보를
-        수집 시 동의받은 개인정보 보유·이용 기간 내에서 개인정보를 처리·보유합니다.
-      </p>
-      <table class="privacy-table">
-        <thead>
-          <tr>
-            <th>항목</th>
-            <th>보유 기간</th>
-            <th>근거</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>학교 설정 정보 전체</td>
-            <td>회원 탈퇴 또는 학교 설정 삭제 요청 시까지</td>
-            <td>이용자 동의</td>
-          </tr>
-          <tr>
-            <td>임시 인증 토큰</td>
-            <td>발급 후 5분 (만료 즉시 자동 삭제)</td>
-            <td>이용자 동의</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 제4조 -->
-    <div class="privacy-section">
-      <h2>제4조 (개인정보의 제3자 제공)</h2>
-      <p>
-        서비스는 정보주체의 개인정보를 제1조(개인정보의 처리 목적)에서 명시한 범위 내에서만
-        처리하며, 정보주체의 동의, 법률의 특별한 규정 등 「개인정보 보호법」 제17조에 해당하는
-        경우에만 개인정보를 제3자에게 제공합니다.
-      </p>
-      <p>
-        단, 학교 시간표·급식 조회를 위해 나이스(NEIS) 교육정보 개방 포털 API
-        (운영기관: 한국교육학술정보원, KERIS)를 이용하며, 해당 API 호출 시
-        학교코드·교육청코드·학년·반 정보가 전달됩니다.
-        이는 공공데이터 활용 목적의 API 호출이며 개인 식별 정보는 전송되지 않습니다.
-      </p>
-    </div>
-
-    <!-- 제5조 -->
-    <div class="privacy-section">
-      <h2>제5조 (개인정보 처리의 위탁)</h2>
-      <table class="privacy-table">
-        <thead>
-          <tr>
-            <th>수탁업체</th>
-            <th>위탁 업무 내용</th>
-            <th>보유 및 이용 기간</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Cloudtype (주식회사 클라우드타입)</td>
-            <td>서버 호스팅 및 데이터베이스(MongoDB) 운영</td>
-            <td>서비스 이용 계약 종료 시까지</td>
-          </tr>
-        </tbody>
-      </table>
-      <p style="margin-top:10px;">
-        서비스는 위탁계약 체결 시 「개인정보 보호법」 제26조에 따라 위탁업무 수행 목적 외
-        개인정보 처리 금지, 기술적·관리적 보호조치, 재위탁 제한 등을 규정하고, 이를 감독합니다.
-      </p>
-    </div>
-
-    <!-- 제6조 -->
-    <div class="privacy-section">
-      <h2>제6조 (정보주체의 권리·의무 및 행사 방법)</h2>
-      <p>정보주체는 서비스에 대해 언제든지 다음 각 호의 개인정보 보호 관련 권리를 행사할 수 있습니다.</p>
-      <ol>
-        <li>개인정보 열람 요구</li>
-        <li>오류 등이 있을 경우 정정 요구</li>
-        <li>삭제 요구</li>
-        <li>처리 정지 요구</li>
-      </ol>
-      <p>
-        권리 행사는 Discord 봇 내 <strong>/탈퇴</strong> 커맨드 또는 개인정보 보호책임자에게
-        서면, 전자우편으로 요청할 수 있으며, 서비스는 이에 대해 지체 없이 조치하겠습니다.
-      </p>
-      <p>
-        정보주체의 법정대리인이나 위임을 받은 자도 위 권리를 행사할 수 있습니다.
-        이 경우 「개인정보 보호법 시행규칙」 별지 제11호 서식에 따른 위임장을 제출해야 합니다.
-      </p>
-    </div>
-
-    <!-- 제7조 -->
-    <div class="privacy-section">
-      <h2>제7조 (개인정보의 파기)</h2>
-      <p>
-        서비스는 개인정보 보유 기간의 경과, 처리 목적 달성 등 개인정보가 불필요하게
-        되었을 때에는 지체 없이 해당 개인정보를 파기합니다.
-      </p>
+    <section class="legal-section">
+      <h2>2. 개인정보 이용 목적</h2>
+      <p>수집한 정보는 다음 목적에만 사용합니다.</p>
       <ul>
-        <li><strong>파기 절차:</strong> 파기 사유가 발생한 개인정보를 선정하여 개인정보 보호책임자의 승인을 받아 파기합니다.</li>
-        <li><strong>파기 방법:</strong> 전자적 파일 형태로 저장된 개인정보는 기록을 재생할 수 없는 기술적 방법(데이터베이스 영구 삭제)을 사용하여 파기합니다.</li>
-        <li><strong>임시 토큰:</strong> 발급 후 5분이 경과하면 자동으로 삭제됩니다.</li>
+        <li>NEIS Open API를 통한 시간표 및 급식 조회</li>
+        <li>사용자별 학교 설정 저장 및 조회</li>
+        <li>Firebase 인증과 Discord 봇 계정 연동</li>
+        <li>서비스 오류 확인 및 기본적인 보안 관리</li>
       </ul>
-    </div>
+    </section>
 
-    <!-- 제8조 -->
-    <div class="privacy-section">
-      <h2>제8조 (개인정보의 안전성 확보 조치)</h2>
-      <p>
-        서비스는 「개인정보 보호법」 제29조에 따라 다음과 같이 안전성 확보에 필요한
-        기술적·관리적·물리적 조치를 하고 있습니다.
-      </p>
-      <ul>
-        <li><strong>접근 통제:</strong> 개인정보 처리 시스템에 대한 접근 권한을 최소화하고 있습니다.</li>
-        <li><strong>암호화:</strong> 관리자 인증 정보는 안전한 방식으로 처리됩니다.</li>
-        <li><strong>통신 구간 암호화:</strong> HTTPS를 통해 데이터를 암호화하여 전송합니다.</li>
-        <li><strong>접속기록 보관:</strong> 개인정보 처리 시스템에 대한 접속기록을 보관합니다.</li>
-      </ul>
-    </div>
+    <section class="legal-section">
+      <h2>3. 보관 기간</h2>
+      <p>개인정보는 회원 탈퇴, 학교 설정 삭제 요청, 서비스 종료 시까지 보관합니다. Discord 연동용 임시 토큰은 발급 후 약 5분 동안만 보관됩니다.</p>
+    </section>
 
-    <!-- 제9조 -->
-    <div class="privacy-section">
-      <h2>제9조 (개인정보 자동 수집 장치의 설치·운영 및 거부)</h2>
-      <p>
-        서비스는 쿠키(cookie) 등 개인정보를 자동으로 수집하는 장치를 별도로 운용하지 않습니다.
-        다만, 임시 인증 토큰은 회원가입 절차 완료 후 5분간만 서버에 보관되며 이후 자동 삭제됩니다.
-      </p>
-    </div>
+    <section class="legal-section">
+      <h2>4. 제3자 제공 및 위탁</h2>
+      <p>서비스는 개인정보를 판매하거나 광고 목적으로 제공하지 않습니다. 다만 서비스 제공을 위해 Firebase Authentication, MongoDB, NEIS Open API 등 외부 서비스를 사용할 수 있습니다.</p>
+    </section>
 
-    <!-- 제10조 -->
-    <div class="privacy-section">
-      <h2>제10조 (개인정보 보호책임자)</h2>
-      <p>
-        서비스는 개인정보 처리에 관한 업무를 총괄해서 책임지고, 정보주체의 개인정보 관련
-        불만 처리 및 피해 구제 등을 위하여 아래와 같이 개인정보 보호책임자를 지정하고 있습니다.
-      </p>
-      <table class="privacy-table">
-        <tbody>
-          <tr>
-            <th>구분</th>
-            <th>내용</th>
-          </tr>
-          <tr>
-            <td>개인정보 보호책임자</td>
-            <td>서비스 운영자</td>
-          </tr>
-          <tr>
-            <td>연락처</td>
-            <td>Discord 봇 /문의 커맨드 또는 서비스 운영 Discord 서버 문의</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <section class="legal-section">
+      <h2>5. 개인정보 보호 조치</h2>
+      <p>서버에 저장되는 민감 정보는 암호화하여 저장하고, 검색이 필요한 식별자는 원문 대신 단방향 해시로 관리합니다. 환경 변수와 비밀키는 코드와 분리하여 관리합니다.</p>
+    </section>
 
-    <!-- 제11조 -->
-    <div class="privacy-section">
-      <h2>제11조 (개인정보 열람 청구)</h2>
-      <p>
-        정보주체는 「개인정보 보호법」 제35조에 따른 개인정보의 열람 청구를
-        아래의 방법으로 할 수 있습니다.
-      </p>
-      <ul>
-        <li>Discord 봇 <strong>/내정보</strong> 커맨드를 통한 직접 열람</li>
-        <li>개인정보 보호책임자 Discord 문의</li>
-      </ul>
-    </div>
+    <section class="legal-section">
+      <h2>6. 이용자의 권리</h2>
+      <p>이용자는 자신의 정보 조회, 수정, 삭제, 탈퇴를 요청할 수 있습니다. 문의는 하단 Discord 링크를 통해 요청할 수 있습니다.</p>
+    </section>
 
-    <!-- 제12조 -->
-    <div class="privacy-section">
-      <h2>제12조 (권익 침해 구제 방법)</h2>
-      <p>
-        정보주체는 개인정보 침해로 인한 구제를 받기 위하여 아래 기관에 분쟁 해결이나
-        상담 등을 신청할 수 있습니다.
-      </p>
-      <ul>
-        <li>개인정보 분쟁조정위원회: (국번없이) 1833-6972 / <a href="https://www.kopico.go.kr" target="_blank">www.kopico.go.kr</a></li>
-        <li>개인정보 침해신고센터: (국번없이) 118 / <a href="https://privacy.kisa.or.kr" target="_blank">privacy.kisa.or.kr</a></li>
-        <li>대검찰청 사이버수사과: (국번없이) 1301 / <a href="https://www.spo.go.kr" target="_blank">www.spo.go.kr</a></li>
-        <li>경찰청 사이버수사국: (국번없이) 182 / <a href="https://ecrm.cyber.go.kr" target="_blank">ecrm.cyber.go.kr</a></li>
-      </ul>
-    </div>
+    <section class="legal-section">
+      <h2>7. 문의</h2>
+      <p>개인정보 처리와 관련한 문의는 <a href="https://discord.gg/2JbvBa2ykP" target="_blank" rel="noopener noreferrer">Discord 문의</a>를 이용해 주세요.</p>
+    </section>
+  </main>
 
-    <!-- 제13조 -->
-    <div class="privacy-section">
-      <h2>제13조 (개인정보처리방침 변경)</h2>
-      <p>
-        이 개인정보처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경 내용의 추가,
-        삭제 및 정정이 있는 경우에는 변경 사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
-      </p>
-      <ul>
-        <li>개인정보처리방침 시행일: 2025년 1월 1일</li>
-        <li>개인정보처리방침 최종 수정일: 2025년 1월 1일</li>
-      </ul>
-    </div>
+  <footer class="site-footer">
+    <a href="/privacy">개인정보처리방침</a>
+    <a href="/terms">이용약관</a>
+    <a href="https://discord.gg/2JbvBa2ykP" target="_blank" rel="noopener noreferrer">문의</a>
+  </footer>
 
-    <a class="privacy-back" href="/register">← 회원가입으로 돌아가기</a>
-
-  </div>
-  <script>
-    (() => {
-      const PRIVACY_READ_KEY = "schoolBotPrivacyReadAt";
-
-      function markPrivacyReadIfComplete() {
-        const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-        const pageHeight = Math.max(
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight
-        );
-
-        if (scrollTop + viewportHeight < pageHeight - 80) return;
-
-        try {
-          localStorage.setItem(PRIVACY_READ_KEY, String(Date.now()));
-        } catch {
-          return;
-        }
-        window.removeEventListener("scroll", markPrivacyReadIfComplete);
-      }
-
-      window.addEventListener("scroll", markPrivacyReadIfComplete, { passive: true });
-      window.addEventListener("load", markPrivacyReadIfComplete);
-    })();
-  </script>
+  </script src="/Privacy.js"></script>
 </body>
 </html>

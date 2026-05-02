@@ -4,18 +4,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>출석처리</title>
+  <title>케토 시간표&급식 조회 서비스</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <h1>출석처리</h1>
+      <h1>케토 시간표&급식 조회 서비스</h1>
       <ul>
         <li>시간표 & 급식</li>
         <li>학교검색 후 학년 반 정보를 입력하면 시간표&급식 정보가 나옵니다.</li>
       </ul>
       <div class="header-actions">
+        <a class="admin-link" href="/login">로그인</a>
+        <a class="admin-link" href="/register">회원가입</a>
         <a class="admin-link" href="/admin/login.html">관리자</a>
         <button id="darkModeToggle" type="button">🌙</button>
       </div>
@@ -102,6 +104,12 @@
       <ul id="schoolList"></ul>
     </div>
   </div>
+
+  <footer class="site-footer">
+    <a href="/privacy">개인정보처리방침</a>
+    <a href="/terms">이용약관</a>
+    <a href="https://discord.gg/2JbvBa2ykP" target="_blank" rel="noopener noreferrer">문의</a>
+  </footer>
 
   <script src="script.js"></script>
 </body>

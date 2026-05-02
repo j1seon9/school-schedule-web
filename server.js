@@ -125,9 +125,11 @@ const userSchema = new mongoose.Schema({
   discordIdHash:   { type: String, unique: true, sparse: true },
   firebaseUidHash: { type: String, unique: true, sparse: true },
   phoneHash:       { type: String, index: true, sparse: true },
+  emailHash:       { type: String, index: true, sparse: true },
   encryptedProfile: { type: String },
   dataVersion: { type: Number, default: 2 },
   privacyReadAt: { type: Date },
+  termsReadAt: { type: Date },
   agreedAt:   { type: Date, default: Date.now },
   createdAt:  { type: Date, default: Date.now }
 });
@@ -167,6 +169,9 @@ async function migrateLegacyUsers() {
       classNo: legacy.classNo,
       firebaseUid: legacy.firebaseUid || "",
       phoneNumber: legacy.phoneNumber || "",
+      email: legacy.email || "",
+      displayName: legacy.displayName || "",
+      authProvider: legacy.authProvider || (legacy.phoneNumber ? "phone" : ""),
       privacyReadAt: legacy.privacyReadAt || legacy.agreedAt || legacy.createdAt || new Date(),
       agreedAt: legacy.agreedAt || legacy.createdAt || new Date(),
       migratedAt: new Date().toISOString()
@@ -187,7 +192,10 @@ async function migrateLegacyUsers() {
           grade: "",
           classNo: "",
           firebaseUid: "",
-          phoneNumber: ""
+          phoneNumber: "",
+          email: "",
+          displayName: "",
+          authProvider: ""
         }
       }
     );
@@ -367,10 +375,15 @@ async function fetchJson(url) {
   return response.json();
 }
 
-async function verifyFirebasePhoneAuth(idToken) {
+async function verifyFirebaseAuth(idToken) {
   if (!idToken || typeof idToken !== "string") throw new Error("FIREBASE_ID_TOKEN_REQUIRED");
   if (TEST_PHONE_AUTH_ENABLED && PHONE_AUTH_TEST_TOKEN && safeEqualText(idToken, PHONE_AUTH_TEST_TOKEN)) {
-    return { firebaseUid: PHONE_AUTH_TEST_UID, phoneNumber: PHONE_AUTH_TEST_PHONE };
+    return {
+      firebaseUid: PHONE_AUTH_TEST_UID,
+      authProvider: "test-phone",
+      providerIds: ["phone"],
+      phoneNumber: PHONE_AUTH_TEST_PHONE
+    };
   }
   if (!FIREBASE_WEB_API_KEY) throw new Error("FIREBASE_CONFIG_MISSING");
 
@@ -388,11 +401,24 @@ async function verifyFirebasePhoneAuth(idToken) {
   }
 
   const user = Array.isArray(payload.users) ? payload.users[0] : null;
-  const phoneProvider = user?.providerUserInfo?.find(provider => provider.providerId === "phone");
+  const providers = Array.isArray(user?.providerUserInfo) ? user.providerUserInfo : [];
+  const phoneProvider = providers.find(provider => provider.providerId === "phone");
+  const googleProvider = providers.find(provider => provider.providerId === "google.com");
   const phoneNumber = user?.phoneNumber || phoneProvider?.phoneNumber || phoneProvider?.rawId || "";
-  if (!user?.localId || !phoneNumber) throw new Error("PHONE_AUTH_REQUIRED");
+  const email = user?.email || googleProvider?.email || "";
+  const displayName = user?.displayName || googleProvider?.displayName || "";
+  const providerIds = providers.map(provider => provider.providerId).filter(Boolean);
+  if (!user?.localId) throw new Error("FIREBASE_ID_TOKEN_INVALID");
+  if (!phoneNumber && !googleProvider) throw new Error("SMS_OR_GOOGLE_AUTH_REQUIRED");
 
-  return { firebaseUid: user.localId, phoneNumber };
+  return {
+    firebaseUid: user.localId,
+    authProvider: phoneNumber ? "phone" : "google.com",
+    providerIds,
+    phoneNumber,
+    email,
+    displayName
+  };
 }
 
 function decryptPendingUserData(pending) {
@@ -415,21 +441,123 @@ function pickUserResponse(profile) {
 
 function buildEncryptedUserUpdate(profile, discordId, guildId) {
   const now = new Date();
+  const normalizedDiscordId = String(discordId || "").trim();
   const fullProfile = {
     ...profile,
-    discordId,
+    discordId: normalizedDiscordId,
     guildId: guildId || "",
     updatedAt: now.toISOString()
   };
 
-  return {
-    discordIdHash: hashLookup("discordId", discordId),
+  const update = {
+    discordIdHash: normalizedDiscordId ? hashLookup("discordId", normalizedDiscordId) : undefined,
     firebaseUidHash: profile.firebaseUid ? hashLookup("firebaseUid", profile.firebaseUid) : undefined,
     phoneHash: profile.phoneNumber ? hashLookup("phone", profile.phoneNumber) : undefined,
+    emailHash: profile.email ? hashLookup("email", String(profile.email).toLowerCase()) : undefined,
     encryptedProfile: encryptJson(fullProfile),
     dataVersion: 2,
     privacyReadAt: profile.privacyReadAt ? new Date(profile.privacyReadAt) : undefined,
+    termsReadAt: profile.termsReadAt ? new Date(profile.termsReadAt) : undefined,
     agreedAt: profile.agreedAt ? new Date(profile.agreedAt) : now
+  };
+  return Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined));
+}
+
+const LEGACY_USER_UNSET = {
+  discordId: "",
+  guildId: "",
+  schoolCode: "",
+  officeCode: "",
+  schoolName: "",
+  officeName: "",
+  type: "",
+  grade: "",
+  classNo: "",
+  phoneNumber: "",
+  email: "",
+  displayName: "",
+  authProvider: "",
+  providerIds: ""
+};
+
+function httpError(status, code, message) {
+  const error = new Error(message || code);
+  error.status = status;
+  error.code = code;
+  return error;
+}
+
+async function buildRegistrationProfile(body = {}) {
+  const {
+    schoolCode,
+    officeCode,
+    schoolName,
+    officeName,
+    type,
+    grade,
+    classNo,
+    privacyAgreed,
+    privacyConfirmed,
+    termsAgreed,
+    termsConfirmed,
+    ageConfirmed,
+    privacyReadAt,
+    termsReadAt,
+    firebaseIdToken
+  } = body;
+
+  if (!schoolCode || !officeCode || !schoolName || !grade || !classNo) {
+    throw httpError(400, "MISSING_REQUIRED_FIELDS", "필수 항목이 누락되었습니다.");
+  }
+  if (!privacyAgreed || !privacyConfirmed || !ageConfirmed) {
+    throw httpError(400, "PRIVACY_CONSENT_REQUIRED", "개인정보 수집 및 이용 동의가 필요합니다.");
+  }
+  if (!termsAgreed || !termsConfirmed) {
+    throw httpError(400, "TERMS_CONSENT_REQUIRED", "이용약관 동의가 필요합니다.");
+  }
+
+  const privacyReadTime = Number(privacyReadAt);
+  const termsReadTime = Number(termsReadAt);
+  const now = Date.now();
+  if (
+    !Number.isFinite(privacyReadTime) ||
+    privacyReadTime > now + 60_000 ||
+    now - privacyReadTime > PRIVACY_READ_MAX_AGE_MS
+  ) {
+    throw httpError(400, "PRIVACY_READ_REQUIRED", "개인정보처리방침 전문을 먼저 확인해 주세요.");
+  }
+  if (
+    !Number.isFinite(termsReadTime) ||
+    termsReadTime > now + 60_000 ||
+    now - termsReadTime > PRIVACY_READ_MAX_AGE_MS
+  ) {
+    throw httpError(400, "TERMS_READ_REQUIRED", "이용약관 전문을 먼저 확인해 주세요.");
+  }
+
+  let firebaseAuth;
+  try {
+    firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
+  } catch (e) {
+    throw httpError(401, "FIREBASE_AUTH_REQUIRED", e.message);
+  }
+
+  return {
+    schoolCode,
+    officeCode,
+    schoolName,
+    officeName: officeName || "",
+    type: type || "",
+    grade,
+    classNo,
+    firebaseUid: firebaseAuth.firebaseUid,
+    authProvider: firebaseAuth.authProvider,
+    providerIds: firebaseAuth.providerIds || [],
+    phoneNumber: firebaseAuth.phoneNumber,
+    email: firebaseAuth.email || "",
+    displayName: firebaseAuth.displayName || "",
+    privacyReadAt: new Date(privacyReadTime),
+    termsReadAt: new Date(termsReadTime),
+    agreedAt: new Date(now)
   };
 }
 
@@ -483,8 +611,16 @@ app.get("/register", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "Register.html"));
 });
 
+app.get(["/login", "/login.html"], (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "Login.html"));
+});
+
 app.get(["/privacy", "/privacy.html"], (req, res) => {
   res.sendFile(path.join(__dirname, "public", "Privacy.html"));
+});
+
+app.get(["/terms", "/terms.html"], (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "Terms.html"));
 });
 
 app.get("/api/firebase-config", (req, res) => {
@@ -496,50 +632,45 @@ app.get("/api/firebase-config", (req, res) => {
     authDomain: FIREBASE_AUTH_DOMAIN,
     projectId: FIREBASE_PROJECT_ID,
     appId: FIREBASE_APP_ID,
-    messagingSenderId: FIREBASE_MESSAGING_SENDER_ID || undefined
+    messagingSenderId: FIREBASE_MESSAGING_SENDER_ID || undefined,
+    testPhoneAuthEnabled: TEST_PHONE_AUTH_ENABLED,
+    testPhoneNumber: TEST_PHONE_AUTH_ENABLED ? PHONE_AUTH_TEST_PHONE : ""
   });
+});
+
+app.post("/api/login", async (req, res) => {
+  try {
+    const { firebaseIdToken } = req.body || {};
+    let firebaseAuth;
+    try {
+      firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
+    } catch (e) {
+      return res.status(401).json({ error: "FIREBASE_AUTH_REQUIRED", message: e.message });
+    }
+
+    const firebaseUidHash = hashLookup("firebaseUid", firebaseAuth.firebaseUid);
+    const user = await User.findOne({ firebaseUidHash });
+    if (!user?.encryptedProfile) {
+      return res.status(404).json({
+        error: "USER_NOT_FOUND",
+        message: "회원정보가 없습니다."
+      });
+    }
+
+    const profile = decryptJson(user.encryptedProfile);
+    res.json({
+      ok: true,
+      user: pickUserResponse(profile)
+    });
+  } catch (e) {
+    res.status(500).json({ error: "LOGIN_ERROR", message: e.message });
+  }
 });
 
 // 회원가입 처리 → 임시 토큰 발급
 app.post("/api/register", async (req, res) => {
   try {
-    const {
-      schoolCode,
-      officeCode,
-      schoolName,
-      officeName,
-      type,
-      grade,
-      classNo,
-      privacyAgreed,
-      privacyConfirmed,
-      ageConfirmed,
-      privacyReadAt,
-      firebaseIdToken
-    } = req.body;
-    if (!schoolCode || !officeCode || !schoolName || !grade || !classNo) {
-      return res.status(400).json({ error: "필수 항목이 누락되었습니다." });
-    }
-    if (!privacyAgreed || !privacyConfirmed || !ageConfirmed) {
-      return res.status(400).json({ error: "개인정보 수집 및 이용 동의가 필요합니다." });
-    }
-
-    const privacyReadTime = Number(privacyReadAt);
-    const now = Date.now();
-    if (
-      !Number.isFinite(privacyReadTime) ||
-      privacyReadTime > now + 60_000 ||
-      now - privacyReadTime > PRIVACY_READ_MAX_AGE_MS
-    ) {
-      return res.status(400).json({ error: "개인정보처리방침 전문을 먼저 확인해 주세요." });
-    }
-
-    let firebaseAuth;
-    try {
-      firebaseAuth = await verifyFirebasePhoneAuth(firebaseIdToken);
-    } catch (e) {
-      return res.status(401).json({ error: "PHONE_AUTH_REQUIRED", message: e.message });
-    }
+    const userData = await buildRegistrationProfile(req.body);
 
     // 6자리 숫자 토큰 생성
     const token = String(Math.floor(100000 + randomBytes(3).readUIntBE(0, 3) % 900000));
@@ -548,19 +679,7 @@ app.post("/api/register", async (req, res) => {
     await PendingToken.findOneAndDelete({ token }); // 혹시 중복이면 삭제
     await PendingToken.create({
       token,
-      encryptedUserData: encryptJson({
-        schoolCode,
-        officeCode,
-        schoolName,
-        officeName: officeName || "",
-        type: type || "",
-        grade,
-        classNo,
-        firebaseUid: firebaseAuth.firebaseUid,
-        phoneNumber: firebaseAuth.phoneNumber,
-        privacyReadAt: new Date(privacyReadTime),
-        agreedAt: new Date(now)
-      }),
+      encryptedUserData: encryptJson(userData),
       expiresAt
     });
 
@@ -569,7 +688,36 @@ app.post("/api/register", async (req, res) => {
 
     res.json({ ok: true, token, expiresAt });
   } catch (e) {
-    res.status(500).json({ error: "REGISTER_ERROR", message: e.message });
+    res.status(e.status || 500).json({ error: e.code || "REGISTER_ERROR", message: e.message });
+  }
+});
+
+app.post("/api/register/web", async (req, res) => {
+  try {
+    const userData = await buildRegistrationProfile(req.body);
+    const encryptedUpdate = buildEncryptedUserUpdate(
+      { ...userData, registrationSource: "web" },
+      "",
+      ""
+    );
+
+    if (!encryptedUpdate.firebaseUidHash) {
+      return res.status(401).json({ error: "FIREBASE_AUTH_REQUIRED" });
+    }
+
+    await User.findOneAndUpdate(
+      { firebaseUidHash: encryptedUpdate.firebaseUidHash },
+      {
+        $set: encryptedUpdate,
+        $setOnInsert: { createdAt: new Date() },
+        $unset: LEGACY_USER_UNSET
+      },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    );
+
+    res.json({ ok: true, user: pickUserResponse(userData) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || "WEB_REGISTER_ERROR", message: e.message });
   }
 });
 
@@ -589,23 +737,31 @@ app.post("/api/verify", async (req, res) => {
     // 사용자 저장 (검색용 해시 + 암호화된 프로필)
     const userData = decryptPendingUserData(pending);
     const encryptedUpdate = buildEncryptedUserUpdate(userData, discordId, guildId);
+    const existingDiscordUser = await User.findOne({ discordIdHash: encryptedUpdate.discordIdHash });
+    const existingFirebaseUser = encryptedUpdate.firebaseUidHash
+      ? await User.findOne({ firebaseUidHash: encryptedUpdate.firebaseUidHash })
+      : null;
+
+    if (
+      existingDiscordUser &&
+      existingFirebaseUser &&
+      String(existingDiscordUser._id) !== String(existingFirebaseUser._id)
+    ) {
+      return res.status(409).json({ error: "ACCOUNT_LINK_CONFLICT" });
+    }
+
+    const userFilter = existingDiscordUser
+      ? { _id: existingDiscordUser._id }
+      : existingFirebaseUser
+        ? { _id: existingFirebaseUser._id }
+        : { discordIdHash: encryptedUpdate.discordIdHash };
 
     await User.findOneAndUpdate(
-      { discordIdHash: encryptedUpdate.discordIdHash },
+      userFilter,
       {
         $set: encryptedUpdate,
         $setOnInsert: { createdAt: new Date() },
-        $unset: {
-          discordId: "",
-          guildId: "",
-          schoolCode: "",
-          officeCode: "",
-          schoolName: "",
-          officeName: "",
-          type: "",
-          grade: "",
-          classNo: ""
-        }
+        $unset: LEGACY_USER_UNSET
       },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
     );
