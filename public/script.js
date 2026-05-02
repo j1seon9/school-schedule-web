@@ -1,3 +1,5 @@
+// public/script.js
+
 const qs = (id) => document.getElementById(id);
 const loadingEl = qs("loading");
 const favoriteListEl = qs("favoriteList");

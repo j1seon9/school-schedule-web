@@ -1,3 +1,4 @@
+<!-- public/Register.html -->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -60,16 +61,32 @@
           회원 탈퇴 또는 학교 설정 삭제 시까지<br><br>
           <strong>거부 권리</strong><br>
           동의를 거부할 수 있으나, 거부 시 서비스 이용이 제한됩니다.<br><br>
-          자세한 내용은 <a href="/privacy.html" target="_blank">개인정보처리방침</a>을 확인하세요.
+          자세한 내용은 <a href="/privacy" target="_blank">개인정보처리방침</a>을 확인하세요.
+        </div>
+
+        <div class="reg-privacy-status" id="privacyStatus"></div>
+
+        <div class="reg-phone-box">
+          <label class="reg-label" for="phoneNumber">휴대폰 번호 인증</label>
+          <div class="reg-search-row">
+            <input id="phoneNumber" type="tel" class="reg-input" value="010-2125-7920" placeholder="010-2125-7920" autocomplete="tel">
+            <button class="reg-btn reg-btn-outline" id="sendPhoneBtn" type="button" onclick="sendPhoneCode()">인증 문자 받기</button>
+          </div>
+          <div id="recaptchaContainer" class="reg-recaptcha"></div>
+          <div class="reg-search-row">
+            <input id="phoneCode" type="text" class="reg-input" placeholder="인증번호 6자리" inputmode="numeric" autocomplete="one-time-code">
+            <button class="reg-btn reg-btn-outline" id="confirmPhoneBtn" type="button" onclick="confirmPhoneCode()" disabled>인증 확인</button>
+          </div>
+          <div class="reg-phone-status" id="phoneStatus">Firebase 휴대폰 인증을 완료해야 가입할 수 있습니다.</div>
         </div>
 
         <div class="reg-agree-row">
-          <input type="checkbox" id="agreeCheck">
+          <input type="checkbox" id="agreeCheck" disabled>
           <label for="agreeCheck">개인정보 수집 및 이용에 동의합니다.</label>
-          <a href="/privacy.html" target="_blank">[전문 보기]</a>
+          <a href="/privacy" target="_blank">[전문 보기]</a>
         </div>
         <div class="reg-agree-row">
-          <input type="checkbox" id="confirmCheck">
+          <input type="checkbox" id="confirmCheck" disabled>
           <label for="confirmCheck">위의 내용을 확인했습니다.</label>
         </div>
         <div class="reg-agree-row">
@@ -78,7 +95,7 @@
         </div>
 
         <div class="reg-msg" id="step2Msg"></div>
-        <button class="reg-btn reg-btn-main" id="submitBtn" onclick="submitRegister()">가입 완료</button>
+        <button class="reg-btn reg-btn-main" id="submitBtn" onclick="submitRegister()" disabled>가입 완료</button>
         <button class="reg-btn reg-btn-outline" onclick="goStep1()">이전</button>
       </div>
 
@@ -102,6 +119,8 @@
     </div>
   </div>
 
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="/register.js"></script>
 </body>
 </html>

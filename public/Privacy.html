@@ -1,3 +1,4 @@
+<!-- public/Privacy.html -->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -14,7 +15,7 @@
       <div style="font-size: 13px; color: rgba(255,255,255,0.8); margin-bottom: 8px;">🏫 학교 봇</div>
       <h1 style="margin: 0; font-size: 26px; font-weight: 700; color: #fff;">개인정보처리방침</h1>
       <p style="margin: 8px 0 0; font-size: 13px; color: rgba(255,255,255,0.85);">
-        시행일: 2025년 1월 1일 &nbsp;·&nbsp; 최종 수정일: 2025년 1월 1일
+        시행일: 2026년 5월 1일 &nbsp;·&nbsp; 최종 수정일: 2026년 5월 1일
       </p>
     </div>
   </div>
@@ -300,5 +301,31 @@
     <a class="privacy-back" href="/register">← 회원가입으로 돌아가기</a>
 
   </div>
+  <script>
+    (() => {
+      const PRIVACY_READ_KEY = "schoolBotPrivacyReadAt";
+
+      function markPrivacyReadIfComplete() {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const pageHeight = Math.max(
+          document.body.scrollHeight,
+          document.documentElement.scrollHeight
+        );
+
+        if (scrollTop + viewportHeight < pageHeight - 80) return;
+
+        try {
+          localStorage.setItem(PRIVACY_READ_KEY, String(Date.now()));
+        } catch {
+          return;
+        }
+        window.removeEventListener("scroll", markPrivacyReadIfComplete);
+      }
+
+      window.addEventListener("scroll", markPrivacyReadIfComplete, { passive: true });
+      window.addEventListener("load", markPrivacyReadIfComplete);
+    })();
+  </script>
 </body>
 </html>

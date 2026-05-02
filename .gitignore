@@ -1,3 +1,6 @@
 .env
 node_modules/
 package-lock.json
+server-start.log
+server-error.log
+server.pid

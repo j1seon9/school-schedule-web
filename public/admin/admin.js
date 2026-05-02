@@ -1,3 +1,5 @@
+// public/admin/admin.js
+
 const STORAGE_KEY = "admin.credentials.v1";
 const REFRESH_INTERVAL_MS = 5000;
 const MAX_POINTS = 30;

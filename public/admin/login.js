@@ -1,3 +1,5 @@
+// public/admin/login.js
+
 const STORAGE_KEY = "admin.credentials.v1";
 const STATUS_PATH = "/admin/admin.html";
 

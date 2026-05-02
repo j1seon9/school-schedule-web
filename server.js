@@ -1,10 +1,12 @@
+// server.js
+
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
 import dotenv from "dotenv";
 import os from "os";
 import path from "path";
-import { timingSafeEqual, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 
@@ -30,8 +32,81 @@ const DDOS_ALERT_THRESHOLD = Math.ceil(RATE_LIMIT * 0.8);
 const NOTICE_MAX_LENGTH   = 300;
 const NOTICE_MAX_ITEMS    = 100;
 const TOKEN_TTL_MS        = 5 * 60 * 1000; // 5분
+const PRIVACY_READ_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const FIREBASE_WEB_API_KEY = (process.env.FIREBASE_WEB_API_KEY || "").trim();
+const FIREBASE_AUTH_DOMAIN = (process.env.FIREBASE_AUTH_DOMAIN || "").trim();
+const FIREBASE_PROJECT_ID  = (process.env.FIREBASE_PROJECT_ID  || "").trim();
+const FIREBASE_APP_ID      = (process.env.FIREBASE_APP_ID      || "").trim();
+const FIREBASE_MESSAGING_SENDER_ID = (process.env.FIREBASE_MESSAGING_SENDER_ID || "").trim();
+const DATA_ENCRYPTION_KEY = (process.env.DATA_ENCRYPTION_KEY || "").trim();
+const TEST_PHONE_AUTH_ENABLED = process.env.ENABLE_TEST_PHONE_AUTH === "true" && process.env.NODE_ENV !== "production";
+const PHONE_AUTH_TEST_TOKEN = (process.env.PHONE_AUTH_TEST_TOKEN || "").trim();
+const PHONE_AUTH_TEST_UID = (process.env.PHONE_AUTH_TEST_UID || "test-phone-user").trim();
+const PHONE_AUTH_TEST_PHONE = (process.env.PHONE_AUTH_TEST_PHONE || "+821012345678").trim();
 
 if (!API_KEY) console.warn("[WARN] API_KEY is not set.");
+if (!DATA_ENCRYPTION_KEY) console.warn("[WARN] DATA_ENCRYPTION_KEY is not set; private data cannot be stored.");
+if (TEST_PHONE_AUTH_ENABLED) console.warn("[WARN] Test phone auth is enabled. Do not enable it in production.");
+
+function parseEncryptionKey(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const decoders = [
+    () => Buffer.from(raw, "base64"),
+    () => /^[0-9a-f]{64}$/i.test(raw) ? Buffer.from(raw, "hex") : null,
+    () => Buffer.from(raw, "utf8")
+  ];
+
+  for (const decode of decoders) {
+    const key = decode();
+    if (key?.length === 32) return key;
+  }
+  throw new Error("DATA_ENCRYPTION_KEY must be 32 bytes. Use a base64 value from crypto.randomBytes(32).");
+}
+
+const encryptionKey = parseEncryptionKey(DATA_ENCRYPTION_KEY);
+
+function requireEncryptionKey() {
+  if (!encryptionKey) throw new Error("DATA_ENCRYPTION_KEY is required to store private data.");
+  return encryptionKey;
+}
+
+function encryptJson(value) {
+  const key = requireEncryptionKey();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const plaintext = Buffer.from(JSON.stringify(value), "utf8");
+  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+}
+
+function decryptJson(payload) {
+  const key = requireEncryptionKey();
+  const [version, ivText, tagText, encryptedText] = String(payload || "").split(":");
+  if (version !== "v1" || !ivText || !tagText || !encryptedText) {
+    throw new Error("Unsupported encrypted payload.");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(encryptedText, "base64url")),
+    decipher.final()
+  ]);
+  return JSON.parse(decrypted.toString("utf8"));
+}
+
+function hashLookup(namespace, value) {
+  const key = requireEncryptionKey();
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  return createHmac("sha256", key).update(`${namespace}:${normalized}`).digest("hex");
+}
+
+function isFirebaseConfigReady() {
+  return Boolean(FIREBASE_WEB_API_KEY && FIREBASE_AUTH_DOMAIN && FIREBASE_PROJECT_ID && FIREBASE_APP_ID);
+}
 
 // ── MongoDB 스키마 ────────────────────────────────────────
 
@@ -42,18 +117,17 @@ const noticeSchema = new mongoose.Schema({
   date:      { type: String, required: true },
   createdAt: { type: Number, required: true }
 });
+noticeSchema.index({ createdAt: -1 });
 const Notice = mongoose.model("Notice", noticeSchema);
 
 // 사용자
 const userSchema = new mongoose.Schema({
-  discordId:  { type: String, default: "" },
-  schoolCode: { type: String, required: true },
-  officeCode: { type: String, required: true },
-  schoolName: { type: String, required: true },
-  officeName: { type: String, default: "" },
-  type:       { type: String, default: "" },
-  grade:      { type: String, required: true },
-  classNo:    { type: String, required: true },
+  discordIdHash:   { type: String, unique: true, sparse: true },
+  firebaseUidHash: { type: String, unique: true, sparse: true },
+  phoneHash:       { type: String, index: true, sparse: true },
+  encryptedProfile: { type: String },
+  dataVersion: { type: Number, default: 2 },
+  privacyReadAt: { type: Date },
   agreedAt:   { type: Date, default: Date.now },
   createdAt:  { type: Date, default: Date.now }
 });
@@ -62,26 +136,104 @@ const User = mongoose.model("User", userSchema);
 // 임시 토큰
 const pendingTokenSchema = new mongoose.Schema({
   token:     { type: String, required: true, unique: true },
-  userData:  { type: Object, required: true },
+  encryptedUserData: { type: String },
+  userData:  { type: Object, select: false },
   expiresAt: { type: Date,   required: true }
 });
+pendingTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 const PendingToken = mongoose.model("PendingToken", pendingTokenSchema);
 
 // ── MongoDB 연결 ──────────────────────────────────────────
 let dbConnected = false;
+let dbConnecting = false;
+
+async function migrateLegacyUsers() {
+  if (!encryptionKey) return;
+
+  const legacyUsers = await User.collection.find({
+    encryptedProfile: { $exists: false },
+    discordId: { $exists: true, $nin: ["", null] }
+  }).toArray();
+  if (legacyUsers.length === 0) return;
+
+  for (const legacy of legacyUsers) {
+    const profile = {
+      schoolCode: legacy.schoolCode,
+      officeCode: legacy.officeCode,
+      schoolName: legacy.schoolName,
+      officeName: legacy.officeName || "",
+      type: legacy.type || "",
+      grade: legacy.grade,
+      classNo: legacy.classNo,
+      firebaseUid: legacy.firebaseUid || "",
+      phoneNumber: legacy.phoneNumber || "",
+      privacyReadAt: legacy.privacyReadAt || legacy.agreedAt || legacy.createdAt || new Date(),
+      agreedAt: legacy.agreedAt || legacy.createdAt || new Date(),
+      migratedAt: new Date().toISOString()
+    };
+    const encryptedUpdate = buildEncryptedUserUpdate(profile, legacy.discordId, legacy.guildId || "");
+    await User.collection.updateOne(
+      { _id: legacy._id },
+      {
+        $set: encryptedUpdate,
+        $unset: {
+          discordId: "",
+          guildId: "",
+          schoolCode: "",
+          officeCode: "",
+          schoolName: "",
+          officeName: "",
+          type: "",
+          grade: "",
+          classNo: "",
+          firebaseUid: "",
+          phoneNumber: ""
+        }
+      }
+    );
+  }
+
+  console.log(`Migrated ${legacyUsers.length} legacy user document(s) to encrypted storage`);
+}
+
+async function ensureDbIndexes() {
+  try {
+    const userIndexes = await User.collection.indexes();
+    if (userIndexes.some(index => index.name === "discordId_1")) {
+      await User.collection.dropIndex("discordId_1");
+      console.log("Dropped legacy users.discordId index");
+    }
+    await migrateLegacyUsers();
+    await Promise.all([
+      Notice.createIndexes(),
+      User.createIndexes(),
+      PendingToken.createIndexes()
+    ]);
+    console.log("MongoDB indexes ready");
+  } catch (e) {
+    console.warn(`MongoDB index setup warning: ${e.message}`);
+  }
+}
 
 async function initDb() {
-  while (true) {
-    try {
-      await mongoose.connect(MONGODB_URI);
-      dbConnected = true;
-      console.log("✅ MongoDB 연결 완료");
-      break;
-    } catch (e) {
-      dbConnected = false;
-      console.error(`⚠️ MongoDB 연결 실패: ${e.message} → 5초 후 재시도`);
-      await new Promise(r => setTimeout(r, 5000));
+  if (dbConnecting) return;
+  dbConnecting = true;
+  try {
+    while (true) {
+      try {
+        await mongoose.connect(MONGODB_URI);
+        await ensureDbIndexes();
+        dbConnected = true;
+        console.log("MongoDB connected");
+        break;
+      } catch (e) {
+        dbConnected = false;
+        console.error(`MongoDB connection failed: ${e.message}. Retrying in 5 seconds.`);
+        await new Promise(r => setTimeout(r, 5000));
+      }
     }
+  } finally {
+    dbConnecting = false;
   }
 }
 
@@ -215,6 +367,72 @@ async function fetchJson(url) {
   return response.json();
 }
 
+async function verifyFirebasePhoneAuth(idToken) {
+  if (!idToken || typeof idToken !== "string") throw new Error("FIREBASE_ID_TOKEN_REQUIRED");
+  if (TEST_PHONE_AUTH_ENABLED && PHONE_AUTH_TEST_TOKEN && safeEqualText(idToken, PHONE_AUTH_TEST_TOKEN)) {
+    return { firebaseUid: PHONE_AUTH_TEST_UID, phoneNumber: PHONE_AUTH_TEST_PHONE };
+  }
+  if (!FIREBASE_WEB_API_KEY) throw new Error("FIREBASE_CONFIG_MISSING");
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_WEB_API_KEY)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken })
+    }
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || "FIREBASE_ID_TOKEN_INVALID");
+  }
+
+  const user = Array.isArray(payload.users) ? payload.users[0] : null;
+  const phoneProvider = user?.providerUserInfo?.find(provider => provider.providerId === "phone");
+  const phoneNumber = user?.phoneNumber || phoneProvider?.phoneNumber || phoneProvider?.rawId || "";
+  if (!user?.localId || !phoneNumber) throw new Error("PHONE_AUTH_REQUIRED");
+
+  return { firebaseUid: user.localId, phoneNumber };
+}
+
+function decryptPendingUserData(pending) {
+  if (pending?.encryptedUserData) return decryptJson(pending.encryptedUserData);
+  if (pending?.userData) return pending.userData;
+  throw new Error("PENDING_DATA_MISSING");
+}
+
+function pickUserResponse(profile) {
+  return {
+    schoolCode: profile.schoolCode,
+    officeCode: profile.officeCode,
+    schoolName: profile.schoolName,
+    officeName: profile.officeName || "",
+    type:       profile.type || "",
+    grade:      profile.grade,
+    classNo:    profile.classNo
+  };
+}
+
+function buildEncryptedUserUpdate(profile, discordId, guildId) {
+  const now = new Date();
+  const fullProfile = {
+    ...profile,
+    discordId,
+    guildId: guildId || "",
+    updatedAt: now.toISOString()
+  };
+
+  return {
+    discordIdHash: hashLookup("discordId", discordId),
+    firebaseUidHash: profile.firebaseUid ? hashLookup("firebaseUid", profile.firebaseUid) : undefined,
+    phoneHash: profile.phoneNumber ? hashLookup("phone", profile.phoneNumber) : undefined,
+    encryptedProfile: encryptJson(fullProfile),
+    dataVersion: 2,
+    privacyReadAt: profile.privacyReadAt ? new Date(profile.privacyReadAt) : undefined,
+    agreedAt: profile.agreedAt ? new Date(profile.agreedAt) : now
+  };
+}
+
 function parseNeisResult(payload) {
   if (!payload || typeof payload !== "object") return null;
   if (payload.RESULT && typeof payload.RESULT.CODE === "string") return payload.RESULT;
@@ -262,15 +480,65 @@ function formatDateToYmd(date) {
 
 // 회원가입 페이지
 app.get("/register", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "register.html"));
+  res.sendFile(path.join(__dirname, "public", "Register.html"));
+});
+
+app.get(["/privacy", "/privacy.html"], (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "Privacy.html"));
+});
+
+app.get("/api/firebase-config", (req, res) => {
+  if (!isFirebaseConfigReady()) {
+    return res.status(503).json({ error: "FIREBASE_CONFIG_MISSING" });
+  }
+  res.json({
+    apiKey: FIREBASE_WEB_API_KEY,
+    authDomain: FIREBASE_AUTH_DOMAIN,
+    projectId: FIREBASE_PROJECT_ID,
+    appId: FIREBASE_APP_ID,
+    messagingSenderId: FIREBASE_MESSAGING_SENDER_ID || undefined
+  });
 });
 
 // 회원가입 처리 → 임시 토큰 발급
 app.post("/api/register", async (req, res) => {
   try {
-    const { schoolCode, officeCode, schoolName, officeName, type, grade, classNo } = req.body;
+    const {
+      schoolCode,
+      officeCode,
+      schoolName,
+      officeName,
+      type,
+      grade,
+      classNo,
+      privacyAgreed,
+      privacyConfirmed,
+      ageConfirmed,
+      privacyReadAt,
+      firebaseIdToken
+    } = req.body;
     if (!schoolCode || !officeCode || !schoolName || !grade || !classNo) {
       return res.status(400).json({ error: "필수 항목이 누락되었습니다." });
+    }
+    if (!privacyAgreed || !privacyConfirmed || !ageConfirmed) {
+      return res.status(400).json({ error: "개인정보 수집 및 이용 동의가 필요합니다." });
+    }
+
+    const privacyReadTime = Number(privacyReadAt);
+    const now = Date.now();
+    if (
+      !Number.isFinite(privacyReadTime) ||
+      privacyReadTime > now + 60_000 ||
+      now - privacyReadTime > PRIVACY_READ_MAX_AGE_MS
+    ) {
+      return res.status(400).json({ error: "개인정보처리방침 전문을 먼저 확인해 주세요." });
+    }
+
+    let firebaseAuth;
+    try {
+      firebaseAuth = await verifyFirebasePhoneAuth(firebaseIdToken);
+    } catch (e) {
+      return res.status(401).json({ error: "PHONE_AUTH_REQUIRED", message: e.message });
     }
 
     // 6자리 숫자 토큰 생성
@@ -280,7 +548,19 @@ app.post("/api/register", async (req, res) => {
     await PendingToken.findOneAndDelete({ token }); // 혹시 중복이면 삭제
     await PendingToken.create({
       token,
-      userData: { schoolCode, officeCode, schoolName, officeName: officeName || "", type: type || "", grade, classNo },
+      encryptedUserData: encryptJson({
+        schoolCode,
+        officeCode,
+        schoolName,
+        officeName: officeName || "",
+        type: type || "",
+        grade,
+        classNo,
+        firebaseUid: firebaseAuth.firebaseUid,
+        phoneNumber: firebaseAuth.phoneNumber,
+        privacyReadAt: new Date(privacyReadTime),
+        agreedAt: new Date(now)
+      }),
       expiresAt
     });
 
@@ -299,29 +579,40 @@ app.post("/api/verify", async (req, res) => {
     const { token, discordId, guildId } = req.body;
     if (!token || !discordId) return res.status(400).json({ error: "TOKEN_AND_DISCORDID_REQUIRED" });
 
-    const pending = await PendingToken.findOne({ token });
+    const pending = await PendingToken.findOne({ token }).select("+userData");
     if (!pending) return res.status(404).json({ error: "TOKEN_NOT_FOUND" });
     if (pending.expiresAt < new Date()) {
       await PendingToken.deleteOne({ token });
       return res.status(410).json({ error: "TOKEN_EXPIRED" });
     }
 
-    // 사용자 저장 (discordId 기준 upsert)
-    const userData = {
-      ...pending.userData,
-      discordId,
-      guildId: guildId || ""
-    };
+    // 사용자 저장 (검색용 해시 + 암호화된 프로필)
+    const userData = decryptPendingUserData(pending);
+    const encryptedUpdate = buildEncryptedUserUpdate(userData, discordId, guildId);
 
     await User.findOneAndUpdate(
-      { discordId },
-      { ...userData, createdAt: new Date() },
-      { upsert: true, new: true }
+      { discordIdHash: encryptedUpdate.discordIdHash },
+      {
+        $set: encryptedUpdate,
+        $setOnInsert: { createdAt: new Date() },
+        $unset: {
+          discordId: "",
+          guildId: "",
+          schoolCode: "",
+          officeCode: "",
+          schoolName: "",
+          officeName: "",
+          type: "",
+          grade: "",
+          classNo: ""
+        }
+      },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
     );
 
     await PendingToken.deleteOne({ token });
 
-    res.json({ ok: true, user: userData });
+    res.json({ ok: true, user: pickUserResponse(userData) });
   } catch (e) {
     res.status(500).json({ error: "VERIFY_ERROR", message: e.message });
   }
@@ -333,18 +624,12 @@ app.get("/api/user/:discordId", async (req, res) => {
     const discordId = String(req.params.discordId || "").trim();
     if (!discordId) return res.status(400).json({ error: "DISCORDID_REQUIRED" });
 
-    const user = await User.findOne({ discordId });
+    const discordIdHash = hashLookup("discordId", discordId);
+    const user = await User.findOne({ discordIdHash });
     if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
 
-    res.json({
-      schoolCode: user.schoolCode,
-      officeCode: user.officeCode,
-      schoolName: user.schoolName,
-      officeName: user.officeName,
-      type:       user.type,
-      grade:      user.grade,
-      classNo:    user.classNo
-    });
+    const profile = decryptJson(user.encryptedProfile);
+    res.json(pickUserResponse(profile));
   } catch (e) {
     res.status(500).json({ error: "USER_FETCH_ERROR", message: e.message });
   }
