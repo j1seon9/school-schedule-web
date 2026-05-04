@@ -63,9 +63,9 @@ DATA_ENCRYPTION_KEY= # 위에서 생성한 base64 키
 # Firebase Web App Configuration
 FIREBASE_WEB_API_KEY=<Firebase web config apiKey>
 FIREBASE_AUTH_DOMAIN=<Firebase web config authDomain>
-FIREBASE_PROJECT_ID=school-scadule-web
+FIREBASE_PROJECT_ID=<Your Firebase Project ID>
 FIREBASE_APP_ID=<Firebase web config appId, e.g. 1:198944642051:web:...>
-FIREBASE_MESSAGING_SENDER_ID=198944642051
+FIREBASE_MESSAGING_SENDER_ID=<Your Firebase messaging sender id>
 ```
 
 ## Firebase 설정
