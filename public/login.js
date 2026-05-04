@@ -62,6 +62,7 @@ function persistLoggedInUser(user) {
   localStorage.setItem("favoriteSchool", JSON.stringify(school));
   localStorage.setItem("search.state.v1", JSON.stringify(searchState));
   localStorage.setItem("schoolBotLoginUser", JSON.stringify({
+    userId: user.userId || "",
     school,
     grade: user.grade || "",
     classNo: user.classNo || "",

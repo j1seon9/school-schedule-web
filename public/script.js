@@ -6,6 +6,36 @@ const favoriteListEl = qs("favoriteList");
 const favoriteSaveBtnEl = qs("favoriteSaveBtn");
 const favoriteEmptyEl = qs("favoriteEmpty");
 const searchBtnEl = qs("searchBtn");
+const OWNER_USER_ID = "j1s3on9";
+const LOGIN_USER_KEY = "schoolBotLoginUser";
+
+function readLoggedInUser() {
+  try {
+    const raw = localStorage.getItem(LOGIN_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    localStorage.removeItem(LOGIN_USER_KEY);
+    return null;
+  }
+}
+
+function applyAuthUi() {
+  const user = readLoggedInUser();
+  const userId = String(user?.userId || "").trim();
+  const isLoggedIn = Boolean(user?.loggedInAt);
+  const hasConfirmedUserId = isLoggedIn && Boolean(userId);
+  const isOwner = userId === OWNER_USER_ID;
+
+  qs("loginNavLink")?.classList.toggle("hidden", hasConfirmedUserId);
+  qs("registerNavLink")?.classList.toggle("hidden", hasConfirmedUserId);
+  qs("accountNavLink")?.classList.toggle("hidden", !hasConfirmedUserId);
+  qs("adminNavLink")?.classList.toggle("hidden", !isOwner);
+
+  const cardEl = qs("loginUserCard");
+  const idEl = qs("loginUserId");
+  if (idEl) idEl.textContent = userId || "미설정";
+  cardEl?.classList.toggle("hidden", !hasConfirmedUserId);
+}
 
 function showLoading() {
   loadingEl?.classList.remove("hidden");
@@ -845,6 +875,7 @@ window.loadMonthlyMeal = loadMonthlyMeal;
 
 document.addEventListener("DOMContentLoaded", async () => {
   initTheme();
+  applyAuthUi();
   initSchoolSearchEvents();
   bindSearchStateEvents();
   applySearchState();

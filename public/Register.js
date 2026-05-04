@@ -11,6 +11,9 @@ let firebaseAuthMethod = "";
 let firebaseClientConfig = null;
 const PRIVACY_READ_KEY = "schoolBotPrivacyReadAt";
 const TERMS_READ_KEY = "schoolBotTermsReadAt";
+const PRIVACY_READ_NONCE_KEY = "schoolBotPrivacyReadNonce";
+const TERMS_READ_NONCE_KEY = "schoolBotTermsReadNonce";
+const REGISTER_READ_NONCE_KEY = "schoolBotRegisterReadNonce";
 const PRIVACY_READ_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const REDIRECTING_TO_LOCALHOST = window.location.hostname === "127.0.0.1";
 
@@ -18,6 +21,30 @@ if (REDIRECTING_TO_LOCALHOST) {
   const url = new URL(window.location.href);
   url.hostname = "localhost";
   window.location.replace(url.toString());
+}
+
+const registerReadNonce = getRegisterReadNonce();
+
+function getRegisterReadNonce() {
+  try {
+    const urlNonce = new URLSearchParams(window.location.search).get("readNonce");
+    if (urlNonce) {
+      sessionStorage.setItem(REGISTER_READ_NONCE_KEY, urlNonce);
+      return urlNonce;
+    }
+    const saved = sessionStorage.getItem(REGISTER_READ_NONCE_KEY);
+    if (saved) return saved;
+    const nonce = createReadNonce();
+    sessionStorage.setItem(REGISTER_READ_NONCE_KEY, nonce);
+    return nonce;
+  } catch {
+    return createReadNonce();
+  }
+}
+
+function createReadNonce() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function getPrivacyReadAt() {
@@ -38,16 +65,40 @@ function getStoredReadAt(key) {
 }
 
 function hasReadPrivacy() {
-  return isRecentReadAt(getPrivacyReadAt());
+  return isRecentReadAt(getPrivacyReadAt(), PRIVACY_READ_NONCE_KEY);
 }
 
 function hasReadTerms() {
-  return isRecentReadAt(getTermsReadAt());
+  return isRecentReadAt(getTermsReadAt(), TERMS_READ_NONCE_KEY);
 }
 
-function isRecentReadAt(readAt) {
+function getStoredText(key) {
+  try {
+    return localStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function isRecentReadAt(readAt, nonceKey) {
   const now = Date.now();
-  return readAt > 0 && readAt <= now + 60_000 && now - readAt <= PRIVACY_READ_MAX_AGE_MS;
+  return (
+    readAt > 0 &&
+    getStoredText(nonceKey) === registerReadNonce &&
+    readAt <= now + 60_000 &&
+    now - readAt <= PRIVACY_READ_MAX_AGE_MS
+  );
+}
+
+function updateLegalLinks() {
+  document.querySelectorAll('a[href="/privacy"], a[href="/terms"]').forEach(link => {
+    const path = link.getAttribute("href");
+    const url = new URL(path, window.location.origin);
+    url.searchParams.set("from", "register");
+    url.searchParams.set("readNonce", registerReadNonce);
+    url.searchParams.set("returnTo", "/register");
+    link.href = `${url.pathname}${url.search}`;
+  });
 }
 
 function updatePrivacyGate() {
@@ -56,34 +107,28 @@ function updatePrivacyGate() {
   const statusEl = document.getElementById("privacyStatus");
   const termsStatusEl = document.getElementById("termsStatus");
   const agreeCheck = document.getElementById("agreeCheck");
-  const confirmCheck = document.getElementById("confirmCheck");
   const termsAgreeCheck = document.getElementById("termsAgreeCheck");
-  const termsConfirmCheck = document.getElementById("termsConfirmCheck");
 
   if (agreeCheck) agreeCheck.disabled = !isPrivacyRead;
-  if (confirmCheck) confirmCheck.disabled = !isPrivacyRead;
   if (!isPrivacyRead) {
     if (agreeCheck) agreeCheck.checked = false;
-    if (confirmCheck) confirmCheck.checked = false;
   }
 
   if (termsAgreeCheck) termsAgreeCheck.disabled = !isTermsRead;
-  if (termsConfirmCheck) termsConfirmCheck.disabled = !isTermsRead;
   if (!isTermsRead) {
     if (termsAgreeCheck) termsAgreeCheck.checked = false;
-    if (termsConfirmCheck) termsConfirmCheck.checked = false;
   }
 
   if (statusEl) {
     statusEl.textContent = isPrivacyRead
       ? "개인정보처리방침 전문 확인이 완료되었습니다."
-      : "개인정보처리방침 전문을 끝까지 읽은 뒤 동의할 수 있습니다.";
+      : "현재 회원가입 과정에서 개인정보처리방침 전문을 끝까지 읽은 뒤 동의할 수 있습니다.";
     statusEl.classList.toggle("is-ready", isPrivacyRead);
   }
   if (termsStatusEl) {
     termsStatusEl.textContent = isTermsRead
       ? "이용약관 전문 확인이 완료되었습니다."
-      : "이용약관 전문을 끝까지 읽은 뒤 동의할 수 있습니다.";
+      : "현재 회원가입 과정에서 이용약관 전문을 끝까지 읽은 뒤 동의할 수 있습니다.";
     termsStatusEl.classList.toggle("is-ready", isTermsRead);
   }
   updateSubmitGate();
@@ -325,11 +370,22 @@ function goStep2() {
   if (!selectedSchool) return showMsg("step1Msg", "학교를 선택하세요.", "error");
   const grade   = document.getElementById("grade").value.trim();
   const classNo = document.getElementById("classNo").value.trim();
+  const userId = normalizeUserIdInput(document.getElementById("userId").value);
   if (!grade)   return showMsg("step1Msg", "학년을 입력하세요.", "error");
   if (!classNo) return showMsg("step1Msg", "반을 입력하세요.", "error");
+  if (!isValidUserId(userId)) return showMsg("step1Msg", "회원 ID는 영문 소문자, 숫자, _, - 조합의 3~24자로 입력하세요.", "error");
+  document.getElementById("userId").value = userId;
   clearMsg("step1Msg");
   updatePrivacyGate();
   showStep("step2");
+}
+
+function normalizeUserIdInput(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isValidUserId(value) {
+  return /^[a-z0-9_-]{3,24}$/.test(String(value || ""));
 }
 
 function goStep1() { showStep("step1"); }
@@ -360,6 +416,31 @@ function setStep3Mode(mode) {
   tokenNotice.hidden = true;
 }
 
+function persistRegisteredUser(user) {
+  const school = {
+    name: user.schoolName || "",
+    schoolCode: user.schoolCode || "",
+    officeCode: user.officeCode || "",
+    officeName: user.officeName || "",
+    type: user.type || ""
+  };
+  localStorage.setItem("favoriteSchool", JSON.stringify(school));
+  localStorage.setItem("search.state.v1", JSON.stringify({
+    schoolName: user.schoolName || "",
+    grade: user.grade || "",
+    classNo: user.classNo || "",
+    weekStartDate: "",
+    mealMonthDate: ""
+  }));
+  localStorage.setItem("schoolBotLoginUser", JSON.stringify({
+    userId: user.userId || "",
+    school,
+    grade: user.grade || "",
+    classNo: user.classNo || "",
+    loggedInAt: Date.now()
+  }));
+}
+
 async function submitRegister(mode = "web") {
   if (!hasReadPrivacy()) {
     updatePrivacyGate();
@@ -372,14 +453,8 @@ async function submitRegister(mode = "web") {
   if (!document.getElementById("agreeCheck").checked) {
     return showMsg("step2Msg", "개인정보 수집 및 이용에 동의해주세요.", "error");
   }
-  if (!document.getElementById("confirmCheck").checked) {
-    return showMsg("step2Msg", "위의 내용을 확인했다는 항목에 체크해주세요.", "error");
-  }
   if (!document.getElementById("termsAgreeCheck").checked) {
     return showMsg("step2Msg", "이용약관에 동의해주세요.", "error");
-  }
-  if (!document.getElementById("termsConfirmCheck").checked) {
-    return showMsg("step2Msg", "이용약관 내용을 확인했다는 항목에 체크해주세요.", "error");
   }
   if (!document.getElementById("ageCheck").checked) {
     return showMsg("step2Msg", "만 14세 이상인 경우에만 가입할 수 있습니다.", "error");
@@ -404,10 +479,11 @@ async function submitRegister(mode = "web") {
       type:       selectedSchool.type || "",
       grade:      document.getElementById("grade").value.trim(),
       classNo:    document.getElementById("classNo").value.trim(),
+      userId:     normalizeUserIdInput(document.getElementById("userId").value),
       privacyAgreed: document.getElementById("agreeCheck").checked,
-      privacyConfirmed: document.getElementById("confirmCheck").checked,
+      privacyConfirmed: document.getElementById("agreeCheck").checked,
       termsAgreed: document.getElementById("termsAgreeCheck").checked,
-      termsConfirmed: document.getElementById("termsConfirmCheck").checked,
+      termsConfirmed: document.getElementById("termsAgreeCheck").checked,
       ageConfirmed: document.getElementById("ageCheck").checked,
       privacyReadAt: getPrivacyReadAt(),
       termsReadAt: getTermsReadAt(),
@@ -431,6 +507,7 @@ async function submitRegister(mode = "web") {
       startTimer(5 * 60);
     } else {
       tokenValue = "";
+      persistRegisteredUser(data.user || {});
     }
     showStep("step3");
   } catch {
@@ -481,7 +558,16 @@ function clearMsg(id) {
   el.className = "reg-msg";
 }
 
+function resetAgreementChecks() {
+  ["agreeCheck", "termsAgreeCheck", "ageCheck"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  updateLegalLinks();
+  resetAgreementChecks();
   updatePrivacyGate();
   initFirebaseAuth();
   document.getElementById("schoolInput").addEventListener("keydown", e => {
@@ -502,5 +588,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 window.addEventListener("focus", updatePrivacyGate);
 window.addEventListener("storage", e => {
-  if (e.key === PRIVACY_READ_KEY || e.key === TERMS_READ_KEY) updatePrivacyGate();
+  if (
+    e.key === PRIVACY_READ_KEY ||
+    e.key === TERMS_READ_KEY ||
+    e.key === PRIVACY_READ_NONCE_KEY ||
+    e.key === TERMS_READ_NONCE_KEY
+  ) {
+    updatePrivacyGate();
+  }
 });

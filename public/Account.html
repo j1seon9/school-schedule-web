@@ -1,0 +1,79 @@
+<!-- public/Account.html -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>정보관리 - 학교 봇</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="reg-body">
+  <main class="reg-wrap">
+    <div class="reg-logo">
+      <h1>정보관리</h1>
+      <p>회원 개인 설정정보</p>
+      <a class="login-register-link" href="/">메인으로 돌아가기</a>
+    </div>
+
+    <section class="reg-card account-card" id="accountCard">
+      <div class="account-empty" id="accountEmpty" hidden>
+        <strong>로그인 정보가 없습니다.</strong>
+        <p>로그인하면 회원 설정정보를 확인할 수 있습니다.</p>
+        <a class="admin-link account-action-link" href="/login">로그인</a>
+      </div>
+
+      <div id="accountDetails" hidden>
+        <div class="account-id-card">
+          <span>회원 ID</span>
+          <strong>ID : <span id="accountUserId">-</span></strong>
+        </div>
+
+        <div class="account-info-grid">
+          <div class="account-info-item">
+            <span>학교</span>
+            <strong id="accountSchoolName">-</strong>
+          </div>
+          <div class="account-info-item">
+            <span>학교 구분</span>
+            <strong id="accountSchoolType">-</strong>
+          </div>
+          <div class="account-info-item">
+            <span>학년</span>
+            <strong id="accountGrade">-</strong>
+          </div>
+          <div class="account-info-item">
+            <span>반</span>
+            <strong id="accountClassNo">-</strong>
+          </div>
+          <div class="account-info-item account-info-wide">
+            <span>교육청</span>
+            <strong id="accountOfficeName">-</strong>
+          </div>
+          <div class="account-info-item account-info-wide">
+            <span>로그인 시간</span>
+            <strong id="accountLoggedInAt">-</strong>
+          </div>
+        </div>
+
+        <button class="reg-btn reg-btn-outline" id="logoutBtn" type="button">로그아웃</button>
+
+        <div class="account-danger-zone">
+          <p class="account-danger-note">회원탈퇴 시 MongoDB에 저장된 회원정보가 삭제됩니다.</p>
+          <button class="reg-btn reg-btn-danger" id="deleteAccountBtn" type="button">회원탈퇴</button>
+          <div class="reg-phone-status" id="accountStatus"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a href="/privacy">개인정보처리방침</a>
+    <a href="/terms">이용약관</a>
+    <a href="https://discord.gg/2JbvBa2ykP" target="_blank" rel="noopener noreferrer">문의</a>
+  </footer>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="/account.js"></script>
+</body>
+</html>

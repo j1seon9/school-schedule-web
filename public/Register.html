@@ -4,14 +4,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>회원가입 — 학교 봇</title>
+  <title>회원가입 — 케토 서비스</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="reg-body">
   <div class="reg-wrap">
+    <div class="">
     <div class="reg-logo">
-      <h1>🏫 학교 봇</h1>
-      <p>Discord 봇 회원가입</p>
+      <h1>🏫 케토 서비스</h1>
+      <p>회원가입</p>
       <a class="login-register-link" href="/login">이미 회원이라면 로그인</a>
     </div>
 
@@ -33,13 +34,17 @@
         <div class="reg-row2">
           <div>
             <label class="reg-label">학년</label>
-            <input id="grade" type="number" class="reg-input" placeholder="예: 2" min="1" max="6">
+            <input id="grade" type="number" class="reg-input" placeholder="예: 1" min="1" max="6">
           </div>
           <div>
             <label class="reg-label">반</label>
-            <input id="classNo" type="number" class="reg-input" placeholder="예: 3" min="1">
+            <input id="classNo" type="number" class="reg-input" placeholder="예: 1" min="1">
           </div>
         </div>
+
+        <label class="reg-label" for="userId">회원 ID</label>
+        <input id="userId" type="text" class="reg-input" placeholder="예: example_ID" maxlength="24" autocomplete="username">
+        <div class="muted">영문 소문자, 숫자, _, - 조합의 3~24자로 입력하세요.</div>
 
         <div class="reg-msg" id="step1Msg"></div>
         <button class="reg-btn reg-btn-main" onclick="goStep2()">다음</button>
@@ -85,7 +90,7 @@
           <div class="reg-auth-divider">또는 SMS 인증</div>
           <label class="reg-label" for="phoneNumber">휴대폰 번호 인증</label>
           <div class="reg-search-row">
-            <input id="phoneNumber" type="tel" class="reg-input" value="010-2125-7920" placeholder="010-2125-7920" autocomplete="tel">
+            <input id="phoneNumber" type="tel" class="reg-input" value="010-0000-0000" placeholder="010-0000-0000" autocomplete="tel">
             <button class="reg-btn reg-btn-outline" id="sendPhoneBtn" type="button" onclick="sendPhoneCode()">인증 문자 받기</button>
           </div>
           <div id="recaptchaContainer" class="reg-recaptcha"></div>
@@ -102,17 +107,9 @@
           <a href="/privacy" target="_blank">[전문 보기]</a>
         </div>
         <div class="reg-agree-row">
-          <input type="checkbox" id="confirmCheck" disabled>
-          <label for="confirmCheck">위의 내용을 확인했습니다.</label>
-        </div>
-        <div class="reg-agree-row">
           <input type="checkbox" id="termsAgreeCheck" disabled>
           <label for="termsAgreeCheck">이용약관에 동의합니다.</label>
           <a href="/terms" target="_blank">[전문 보기]</a>
-        </div>
-        <div class="reg-agree-row">
-          <input type="checkbox" id="termsConfirmCheck" disabled>
-          <label for="termsConfirmCheck">이용약관 내용을 확인했습니다.</label>
         </div>
         <div class="reg-agree-row">
           <input type="checkbox" id="ageCheck">

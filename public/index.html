@@ -16,14 +16,20 @@
         <li>학교검색 후 학년 반 정보를 입력하면 시간표&급식 정보가 나옵니다.</li>
       </ul>
       <div class="header-actions">
-        <a class="admin-link" href="/login">로그인</a>
-        <a class="admin-link" href="/register">회원가입</a>
-        <a class="admin-link" href="/admin/login.html">관리자</a>
+        <a class="admin-link" id="loginNavLink" href="/login">로그인</a>
+        <a class="admin-link" id="registerNavLink" href="/register">회원가입</a>
+        <a class="admin-link hidden" id="accountNavLink" href="/account">정보관리</a>
+        <a class="admin-link hidden" id="adminNavLink" href="/admin/login.html">관리자</a>
         <button id="darkModeToggle" type="button">🌙</button>
       </div>
     </header>
 
     <div id="loading" class="loading hidden">데이터 불러오는 중...</div>
+
+    <section class="card user-profile-card hidden" id="loginUserCard">
+      <div class="user-profile-label">회원 정보</div>
+      <div class="user-profile-id">ID : <span id="loginUserId">-</span></div>
+    </section>
 
     <section class="card">
       <div class="row">

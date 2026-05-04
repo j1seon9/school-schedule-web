@@ -1,4 +1,31 @@
 const TERMS_READ_KEY = "schoolBotTermsReadAt";
+const TERMS_READ_NONCE_KEY = "schoolBotTermsReadNonce";
+
+      function getRegisterReadNonce() {
+        try {
+          return new URLSearchParams(window.location.search).get("readNonce") || "";
+        } catch {
+          return "";
+        }
+      }
+
+      function getReturnPath() {
+        try {
+          return new URLSearchParams(window.location.search).get("returnTo") || "/register";
+        } catch {
+          return "/register";
+        }
+      }
+
+      function updateRegisterBackLinks() {
+        const readNonce = getRegisterReadNonce();
+        if (!readNonce) return;
+        const url = new URL(getReturnPath(), window.location.origin);
+        url.searchParams.set("readNonce", readNonce);
+        document.querySelectorAll('a[href="/register"], .legal-back').forEach(link => {
+          link.href = `${url.pathname}${url.search}`;
+        });
+      }
 
       function markTermsReadIfComplete() {
         const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
@@ -8,6 +35,8 @@ const TERMS_READ_KEY = "schoolBotTermsReadAt";
 
         try {
           localStorage.setItem(TERMS_READ_KEY, String(Date.now()));
+          const readNonce = getRegisterReadNonce();
+          if (readNonce) localStorage.setItem(TERMS_READ_NONCE_KEY, readNonce);
         } catch {
           return;
         }
@@ -15,4 +44,7 @@ const TERMS_READ_KEY = "schoolBotTermsReadAt";
       }
 
       window.addEventListener("scroll", markTermsReadIfComplete, { passive: true });
-      window.addEventListener("load", markTermsReadIfComplete);
+      window.addEventListener("load", () => {
+        updateRegisterBackLinks();
+        markTermsReadIfComplete();
+      });

@@ -44,6 +44,7 @@ const TEST_PHONE_AUTH_ENABLED = process.env.ENABLE_TEST_PHONE_AUTH === "true" &&
 const PHONE_AUTH_TEST_TOKEN = (process.env.PHONE_AUTH_TEST_TOKEN || "").trim();
 const PHONE_AUTH_TEST_UID = (process.env.PHONE_AUTH_TEST_UID || "test-phone-user").trim();
 const PHONE_AUTH_TEST_PHONE = (process.env.PHONE_AUTH_TEST_PHONE || "+821012345678").trim();
+const ADMIN_VISIBLE_USER_ID = "j1s3on9";
 
 if (!API_KEY) console.warn("[WARN] API_KEY is not set.");
 if (!DATA_ENCRYPTION_KEY) console.warn("[WARN] DATA_ENCRYPTION_KEY is not set; private data cannot be stored.");
@@ -109,6 +110,15 @@ function isFirebaseConfigReady() {
   return Boolean(FIREBASE_WEB_API_KEY && FIREBASE_AUTH_DOMAIN && FIREBASE_PROJECT_ID && FIREBASE_APP_ID);
 }
 
+function resolveProfileUserId(profile = {}) {
+  const explicitUserId = normalizeUserId(profile.userId);
+  if (explicitUserId) return explicitUserId;
+  if (PHONE_AUTH_TEST_PHONE && String(profile.phoneNumber || "") === PHONE_AUTH_TEST_PHONE) {
+    return ADMIN_VISIBLE_USER_ID;
+  }
+  return "";
+}
+
 // ── MongoDB 스키마 ────────────────────────────────────────
 
 // 공지사항
@@ -125,6 +135,7 @@ const Notice = mongoose.model("Notice", noticeSchema);
 const userSchema = new mongoose.Schema({
   discordIdHash:   { type: String, unique: true, sparse: true },
   firebaseUidHash: { type: String, unique: true, sparse: true },
+  userIdHash:      { type: String, unique: true, sparse: true },
   phoneHash:       { type: String, index: true, sparse: true },
   emailHash:       { type: String, index: true, sparse: true },
   encryptedProfile: { type: String },
@@ -168,6 +179,7 @@ async function migrateLegacyUsers() {
       type: legacy.type || "",
       grade: legacy.grade,
       classNo: legacy.classNo,
+      userId: normalizeUserId(legacy.userId),
       firebaseUid: legacy.firebaseUid || "",
       phoneNumber: legacy.phoneNumber || "",
       email: legacy.email || "",
@@ -192,6 +204,7 @@ async function migrateLegacyUsers() {
           type: "",
           grade: "",
           classNo: "",
+          userId: "",
           firebaseUid: "",
           phoneNumber: "",
           email: "",
@@ -303,6 +316,14 @@ function safeEqualText(left, right) {
   const b = Buffer.from(right);
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
+}
+
+function normalizeUserId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+    .slice(0, 24);
 }
 
 function requireAdminAuth(req, res, next) {
@@ -430,6 +451,7 @@ function decryptPendingUserData(pending) {
 
 function pickUserResponse(profile) {
   return {
+    userId: resolveProfileUserId(profile),
     schoolCode: profile.schoolCode,
     officeCode: profile.officeCode,
     schoolName: profile.schoolName,
@@ -453,6 +475,7 @@ function buildEncryptedUserUpdate(profile, discordId, guildId) {
   const update = {
     discordIdHash: normalizedDiscordId ? hashLookup("discordId", normalizedDiscordId) : undefined,
     firebaseUidHash: profile.firebaseUid ? hashLookup("firebaseUid", profile.firebaseUid) : undefined,
+    userIdHash: profile.userId ? hashLookup("userId", normalizeUserId(profile.userId)) : undefined,
     phoneHash: profile.phoneNumber ? hashLookup("phone", profile.phoneNumber) : undefined,
     emailHash: profile.email ? hashLookup("email", String(profile.email).toLowerCase()) : undefined,
     encryptedProfile: encryptJson(fullProfile),
@@ -474,6 +497,7 @@ const LEGACY_USER_UNSET = {
   type: "",
   grade: "",
   classNo: "",
+  userId: "",
   phoneNumber: "",
   email: "",
   displayName: "",
@@ -502,6 +526,7 @@ async function buildRegistrationProfile(body = {}) {
     termsAgreed,
     termsConfirmed,
     ageConfirmed,
+    userId,
     privacyReadAt,
     termsReadAt,
     firebaseIdToken
@@ -515,6 +540,12 @@ async function buildRegistrationProfile(body = {}) {
   }
   if (!termsAgreed || !termsConfirmed) {
     throw httpError(400, "TERMS_CONSENT_REQUIRED", "이용약관 동의가 필요합니다.");
+  }
+
+  const rawUserId = String(userId || "").trim().toLowerCase();
+  const normalizedUserId = normalizeUserId(userId);
+  if (rawUserId && (rawUserId !== normalizedUserId || normalizedUserId.length < 3)) {
+    throw httpError(400, "USER_ID_INVALID", "회원 ID는 영문 소문자, 숫자, _, - 조합의 3~24자로 입력해 주세요.");
   }
 
   const privacyReadTime = Number(privacyReadAt);
@@ -542,6 +573,14 @@ async function buildRegistrationProfile(body = {}) {
     throw httpError(401, "FIREBASE_AUTH_REQUIRED", e.message);
   }
 
+  const finalUserId = normalizedUserId || resolveProfileUserId({
+    phoneNumber: firebaseAuth.phoneNumber,
+    displayName: firebaseAuth.displayName
+  });
+  if (!finalUserId) {
+    throw httpError(400, "USER_ID_REQUIRED", "회원 ID를 입력해 주세요.");
+  }
+
   return {
     schoolCode,
     officeCode,
@@ -550,6 +589,7 @@ async function buildRegistrationProfile(body = {}) {
     type: type || "",
     grade,
     classNo,
+    userId: finalUserId,
     firebaseUid: firebaseAuth.firebaseUid,
     authProvider: firebaseAuth.authProvider,
     providerIds: firebaseAuth.providerIds || [],
@@ -616,6 +656,10 @@ app.get(["/login", "/login.html"], (req, res) => {
   res.sendFile(path.join(__dirname, "public", "Login.html"));
 });
 
+app.get(["/account", "/account.html"], (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "Account.html"));
+});
+
 app.get(["/privacy", "/privacy.html"], (req, res) => {
   res.sendFile(path.join(__dirname, "public", "Privacy.html"));
 });
@@ -665,6 +709,40 @@ app.post("/api/login", async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ error: "LOGIN_ERROR", message: e.message });
+  }
+});
+
+app.post("/api/account/delete", async (req, res) => {
+  try {
+    const { firebaseIdToken, confirmUserId } = req.body || {};
+    let firebaseAuth;
+    try {
+      firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
+    } catch (e) {
+      return res.status(401).json({ error: "FIREBASE_AUTH_REQUIRED", message: e.message });
+    }
+
+    const firebaseUidHash = hashLookup("firebaseUid", firebaseAuth.firebaseUid);
+    const user = await User.findOne({ firebaseUidHash });
+    if (!user?.encryptedProfile) {
+      return res.status(404).json({ error: "USER_NOT_FOUND", message: "삭제할 회원정보가 없습니다." });
+    }
+
+    const profile = decryptJson(user.encryptedProfile);
+    const storedUserId = resolveProfileUserId(profile);
+    const requestedUserId = normalizeUserId(confirmUserId);
+    if (!requestedUserId || requestedUserId !== storedUserId) {
+      return res.status(400).json({
+        error: "USER_ID_CONFIRMATION_MISMATCH",
+        message: "회원 ID 확인값이 일치하지 않습니다."
+      });
+    }
+
+    await User.deleteOne({ _id: user._id });
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "ACCOUNT_DELETE_ERROR", message: e.message });
   }
 });
 
@@ -718,6 +796,9 @@ app.post("/api/register/web", async (req, res) => {
 
     res.json({ ok: true, user: pickUserResponse(userData) });
   } catch (e) {
+    if (e?.code === 11000) {
+      return res.status(409).json({ error: "USER_ID_DUPLICATE", message: "이미 사용 중인 회원 ID입니다." });
+    }
     res.status(e.status || 500).json({ error: e.code || "WEB_REGISTER_ERROR", message: e.message });
   }
 });
@@ -771,6 +852,9 @@ app.post("/api/verify", async (req, res) => {
 
     res.json({ ok: true, user: pickUserResponse(userData) });
   } catch (e) {
+    if (e?.code === 11000) {
+      return res.status(409).json({ error: "USER_ID_DUPLICATE", message: "이미 사용 중인 회원 ID입니다." });
+    }
     res.status(500).json({ error: "VERIFY_ERROR", message: e.message });
   }
 });
