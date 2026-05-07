@@ -5,6 +5,7 @@ let recaptchaVerifier = null;
 let phoneConfirmationResult = null;
 let firebaseClientConfig = null;
 const REDIRECTING_TO_LOCALHOST = window.location.hostname === "127.0.0.1";
+const REGISTER_DRAFT_KEY = "schoolBotRegisterDraft";
 
 if (REDIRECTING_TO_LOCALHOST) {
   const url = new URL(window.location.href);
@@ -38,8 +39,22 @@ function showMissingUser() {
   if (box) box.hidden = false;
 }
 
+function getRegisterUrl() {
+  try {
+    return sessionStorage.getItem(REGISTER_DRAFT_KEY) ? "/register?resume=1" : "/register";
+  } catch {
+    return "/register";
+  }
+}
+
+function updateRegisterLinks() {
+  document.querySelectorAll('a[href="/register"]').forEach(link => {
+    link.href = getRegisterUrl();
+  });
+}
+
 function goRegister() {
-  window.location.href = "/register";
+  window.location.href = getRegisterUrl();
 }
 
 function persistLoggedInUser(user) {
@@ -94,6 +109,66 @@ async function finishLogin(idToken) {
   persistLoggedInUser(data.user);
   setLoginStatus("로그인이 완료되었습니다. 메인 페이지로 이동합니다.", true);
   window.location.href = "/";
+}
+
+async function loginWithPassword() {
+  hideMissingUser();
+  const userId = document.getElementById("loginUserId").value.trim().toLowerCase();
+  const password = document.getElementById("loginPassword").value;
+  const loginBtn = document.getElementById("passwordLoginBtn");
+
+  if (!/^[a-z0-9_-]{3,24}$/.test(userId)) {
+    return setLoginStatus("회원 ID를 영문 소문자, 숫자, _, - 조합의 3~24자로 입력해 주세요.");
+  }
+  if (!password) return setLoginStatus("비밀번호를 입력해 주세요.");
+
+  loginBtn.disabled = true;
+  setLoginStatus("회원정보를 확인하는 중입니다...");
+  try {
+    const response = await fetch("/api/login/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, password })
+    });
+    const data = await response.json();
+    if (response.status === 404 && data.error === "USER_NOT_FOUND") {
+      setLoginStatus("회원정보가 없습니다.");
+      showMissingUser();
+      return;
+    }
+    if (!response.ok) {
+      setLoginStatus(data.message || data.error || "로그인에 실패했습니다.");
+      return;
+    }
+
+    persistLoggedInUser(data.user);
+    setLoginStatus("로그인이 완료되었습니다. 메인 페이지로 이동합니다.", true);
+    window.location.href = "/";
+  } catch {
+    setLoginStatus("서버 연결에 실패했습니다.");
+  } finally {
+    loginBtn.disabled = false;
+  }
+}
+
+window.loginWithPassword = loginWithPassword;
+
+function initPasswordToggles() {
+  document.querySelectorAll("[data-password-toggle]").forEach(button => {
+    const targetId = button.dataset.passwordToggle;
+    const input = document.getElementById(targetId);
+    if (!input) return;
+
+    input.type = "password";
+    button.textContent = "표시";
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => {
+      const shouldShow = input.type === "password";
+      input.type = shouldShow ? "text" : "password";
+      button.textContent = shouldShow ? "숨김" : "표시";
+      button.setAttribute("aria-pressed", String(shouldShow));
+    });
+  });
 }
 
 async function initFirebaseAuth() {
@@ -167,18 +242,35 @@ async function signInWithGoogle() {
   const googleBtn = document.getElementById("googleLoginBtn");
   googleBtn.disabled = true;
   hideMissingUser();
-  setLoginStatus("Google 인증 페이지로 이동합니다...");
+  setLoginStatus("Google 인증 창을 여는 중입니다...");
 
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    await firebaseAuth.signInWithRedirect(provider);
+    const result = await firebaseAuth.signInWithPopup(provider);
+    if (!result?.user) throw new Error("GOOGLE_USER_MISSING");
+    const idToken = await result.user.getIdToken(true);
+    await finishLogin(idToken);
   } catch (e) {
-    googleBtn.disabled = false;
     if (e.code === "auth/unauthorized-domain") {
       setLoginStatus("Google 인증 허용 도메인 문제가 있습니다. http://localhost:8000/login 으로 접속해 주세요.");
+      googleBtn.disabled = false;
       return;
     }
+    if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e.code)) {
+      try {
+        setLoginStatus("팝업을 열 수 없어 Google 인증 페이지로 이동합니다...");
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+        await firebaseAuth.signInWithRedirect(provider);
+        return;
+      } catch (redirectError) {
+        googleBtn.disabled = false;
+        setLoginStatus(`Google 인증에 실패했습니다: ${redirectError.message}`);
+        return;
+      }
+    }
+    googleBtn.disabled = false;
     setLoginStatus(`Google 인증에 실패했습니다: ${e.message}`);
   }
 }
@@ -191,7 +283,7 @@ async function sendPhoneCode() {
   const phoneInput = document.getElementById("phoneNumber");
   const phoneNumber = normalizePhoneNumber(phoneInput.value);
   if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
-    return setLoginStatus("휴대폰 번호를 010-2125-7920 또는 +821021257920 형식으로 입력해 주세요.");
+    return setLoginStatus("휴대폰 번호를 010-1234-5678 또는 +821012345678 형식으로 입력해 주세요.");
   }
   phoneInput.value = phoneNumber;
 
@@ -238,7 +330,14 @@ async function confirmPhoneCode() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  updateRegisterLinks();
+  initPasswordToggles();
   initFirebaseAuth();
+  ["loginUserId", "loginPassword"].forEach(id => {
+    document.getElementById(id)?.addEventListener("keydown", e => {
+      if (e.key === "Enter") loginWithPassword();
+    });
+  });
   document.getElementById("phoneNumber").addEventListener("input", () => {
     phoneConfirmationResult = null;
     const confirmBtn = document.getElementById("confirmPhoneBtn");

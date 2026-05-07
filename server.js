@@ -6,7 +6,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import os from "os";
 import path from "path";
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { createCipheriv, createDecipheriv, createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "crypto";
 import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 
@@ -44,7 +44,7 @@ const TEST_PHONE_AUTH_ENABLED = process.env.ENABLE_TEST_PHONE_AUTH === "true" &&
 const PHONE_AUTH_TEST_TOKEN = (process.env.PHONE_AUTH_TEST_TOKEN || "").trim();
 const PHONE_AUTH_TEST_UID = (process.env.PHONE_AUTH_TEST_UID || "test-phone-user").trim();
 const PHONE_AUTH_TEST_PHONE = (process.env.PHONE_AUTH_TEST_PHONE || "+821012345678").trim();
-const ADMIN_VISIBLE_USER_ID = "j1s3on9";
+const ADMIN_VISIBLE_USER_ID = (process.env.ADMIN_VISIBLE_USER_ID || "example_admin").trim();
 
 if (!API_KEY) console.warn("[WARN] API_KEY is not set.");
 if (!DATA_ENCRYPTION_KEY) console.warn("[WARN] DATA_ENCRYPTION_KEY is not set; private data cannot be stored.");
@@ -326,6 +326,31 @@ function normalizeUserId(value) {
     .slice(0, 24);
 }
 
+function validatePassword(value) {
+  const password = String(value || "");
+  if (password.length < 8 || password.length > 72) return false;
+  return /[A-Za-z]/.test(password) && /\d/.test(password);
+}
+
+function createPasswordAuth(password) {
+  if (!validatePassword(password)) {
+    throw httpError(400, "PASSWORD_INVALID", "비밀번호는 영문과 숫자를 포함한 8~72자로 입력해 주세요.");
+  }
+  const salt = randomBytes(16).toString("base64url");
+  const iterations = 210000;
+  const digest = "sha256";
+  const hash = pbkdf2Sync(password, salt, iterations, 32, digest).toString("base64url");
+  return { algorithm: "pbkdf2", digest, iterations, salt, hash };
+}
+
+function verifyPasswordAuth(password, passwordAuth = {}) {
+  if (!passwordAuth?.salt || !passwordAuth?.hash || !passwordAuth?.iterations) return false;
+  const digest = passwordAuth.digest || "sha256";
+  const actual = pbkdf2Sync(String(password || ""), passwordAuth.salt, Number(passwordAuth.iterations), 32, digest);
+  const expected = Buffer.from(String(passwordAuth.hash), "base64url");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
 function requireAdminAuth(req, res, next) {
   const id       = String(req.get("x-admin-id")       || "").trim();
   const password = String(req.get("x-admin-password") || "");
@@ -512,6 +537,67 @@ function httpError(status, code, message) {
   return error;
 }
 
+function sameUserDocument(left, right) {
+  return Boolean(left && right && String(left._id) === String(right._id));
+}
+
+async function assertWebRegistrationIsNew(encryptedUpdate) {
+  const existingByUserId = encryptedUpdate.userIdHash
+    ? await User.findOne({ userIdHash: encryptedUpdate.userIdHash })
+    : null;
+  if (existingByUserId) {
+    throw httpError(409, "USER_ID_DUPLICATE", "이미 사용 중인 회원 ID입니다.");
+  }
+
+  const existingByFirebase = encryptedUpdate.firebaseUidHash
+    ? await User.findOne({ firebaseUidHash: encryptedUpdate.firebaseUidHash })
+    : null;
+  if (existingByFirebase) {
+    throw httpError(409, "FIREBASE_USER_DUPLICATE", "이미 가입된 Firebase 계정입니다. 로그인해 주세요.");
+  }
+}
+
+function requirePasswordAccount(profile) {
+  if (!profile?.passwordAuth) {
+    throw httpError(400, "PASSWORD_REQUIRED", "웹 회원가입에는 ID/비밀번호 설정이 필요합니다.");
+  }
+}
+
+async function assertUserIdIsAvailable(userId) {
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedUserId) return;
+  const existingByUserId = await User.findOne({ userIdHash: hashLookup("userId", normalizedUserId) });
+  if (existingByUserId) {
+    throw httpError(409, "USER_ID_DUPLICATE", "이미 사용 중인 회원 ID입니다.");
+  }
+}
+
+async function resolveDiscordLinkTarget(encryptedUpdate) {
+  const existingDiscordUser = encryptedUpdate.discordIdHash
+    ? await User.findOne({ discordIdHash: encryptedUpdate.discordIdHash })
+    : null;
+  const existingFirebaseUser = encryptedUpdate.firebaseUidHash
+    ? await User.findOne({ firebaseUidHash: encryptedUpdate.firebaseUidHash })
+    : null;
+  const existingUserIdUser = encryptedUpdate.userIdHash
+    ? await User.findOne({ userIdHash: encryptedUpdate.userIdHash })
+    : null;
+
+  const selectedUser = existingDiscordUser || existingFirebaseUser || null;
+
+  if (existingDiscordUser && existingFirebaseUser && !sameUserDocument(existingDiscordUser, existingFirebaseUser)) {
+    throw httpError(409, "ACCOUNT_LINK_CONFLICT", "Discord 계정과 Firebase 계정이 서로 다른 회원정보에 연결되어 있습니다.");
+  }
+  if (selectedUser && existingUserIdUser && !sameUserDocument(selectedUser, existingUserIdUser)) {
+    throw httpError(409, "USER_ID_DUPLICATE", "이미 사용 중인 회원 ID입니다.");
+  }
+  if (!selectedUser && existingUserIdUser) {
+    throw httpError(409, "USER_ID_DUPLICATE", "이미 사용 중인 회원 ID입니다.");
+  }
+
+  return selectedUser ? { _id: selectedUser._id } : { discordIdHash: encryptedUpdate.discordIdHash };
+}
+
 async function buildRegistrationProfile(body = {}) {
   const {
     schoolCode,
@@ -527,6 +613,7 @@ async function buildRegistrationProfile(body = {}) {
     termsConfirmed,
     ageConfirmed,
     userId,
+    password,
     privacyReadAt,
     termsReadAt,
     firebaseIdToken
@@ -566,16 +653,22 @@ async function buildRegistrationProfile(body = {}) {
     throw httpError(400, "TERMS_READ_REQUIRED", "이용약관 전문을 먼저 확인해 주세요.");
   }
 
-  let firebaseAuth;
-  try {
-    firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
-  } catch (e) {
-    throw httpError(401, "FIREBASE_AUTH_REQUIRED", e.message);
+  const passwordAuth = password ? createPasswordAuth(password) : null;
+  let firebaseAuth = null;
+  if (firebaseIdToken) {
+    try {
+      firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
+    } catch (e) {
+      throw httpError(401, "FIREBASE_AUTH_REQUIRED", e.message);
+    }
+  }
+  if (!firebaseAuth && !passwordAuth) {
+    throw httpError(401, "AUTH_REQUIRED", "SMS, Google 또는 ID/비밀번호 인증 정보가 필요합니다.");
   }
 
   const finalUserId = normalizedUserId || resolveProfileUserId({
-    phoneNumber: firebaseAuth.phoneNumber,
-    displayName: firebaseAuth.displayName
+    phoneNumber: firebaseAuth?.phoneNumber,
+    displayName: firebaseAuth?.displayName
   });
   if (!finalUserId) {
     throw httpError(400, "USER_ID_REQUIRED", "회원 ID를 입력해 주세요.");
@@ -590,12 +683,13 @@ async function buildRegistrationProfile(body = {}) {
     grade,
     classNo,
     userId: finalUserId,
-    firebaseUid: firebaseAuth.firebaseUid,
-    authProvider: firebaseAuth.authProvider,
-    providerIds: firebaseAuth.providerIds || [],
-    phoneNumber: firebaseAuth.phoneNumber,
-    email: firebaseAuth.email || "",
-    displayName: firebaseAuth.displayName || "",
+    passwordAuth,
+    firebaseUid: firebaseAuth?.firebaseUid || "",
+    authProvider: firebaseAuth?.authProvider || "password",
+    providerIds: firebaseAuth?.providerIds || ["password"],
+    phoneNumber: firebaseAuth?.phoneNumber || "",
+    email: firebaseAuth?.email || "",
+    displayName: firebaseAuth?.displayName || "",
     privacyReadAt: new Date(privacyReadTime),
     termsReadAt: new Date(termsReadTime),
     agreedAt: new Date(now)
@@ -683,6 +777,12 @@ app.get("/api/firebase-config", (req, res) => {
   });
 });
 
+app.get("/api/app-config", (req, res) => {
+  res.json({
+    adminVisibleUserId: ADMIN_VISIBLE_USER_ID
+  });
+});
+
 app.post("/api/login", async (req, res) => {
   try {
     const { firebaseIdToken } = req.body || {};
@@ -712,18 +812,58 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-app.post("/api/account/delete", async (req, res) => {
+app.post("/api/login/password", async (req, res) => {
   try {
-    const { firebaseIdToken, confirmUserId } = req.body || {};
-    let firebaseAuth;
-    try {
-      firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
-    } catch (e) {
-      return res.status(401).json({ error: "FIREBASE_AUTH_REQUIRED", message: e.message });
+    const { userId, password } = req.body || {};
+    const normalizedUserId = normalizeUserId(userId);
+    if (!normalizedUserId || normalizedUserId !== String(userId || "").trim().toLowerCase()) {
+      return res.status(400).json({ error: "USER_ID_INVALID", message: "회원 ID를 확인해 주세요." });
+    }
+    if (!password) {
+      return res.status(400).json({ error: "PASSWORD_REQUIRED", message: "비밀번호를 입력해 주세요." });
     }
 
-    const firebaseUidHash = hashLookup("firebaseUid", firebaseAuth.firebaseUid);
-    const user = await User.findOne({ firebaseUidHash });
+    const user = await User.findOne({ userIdHash: hashLookup("userId", normalizedUserId) });
+    if (!user?.encryptedProfile) {
+      return res.status(404).json({ error: "USER_NOT_FOUND", message: "회원정보가 없습니다." });
+    }
+
+    const profile = decryptJson(user.encryptedProfile);
+    if (!verifyPasswordAuth(password, profile.passwordAuth)) {
+      return res.status(401).json({ error: "PASSWORD_INVALID", message: "회원 ID 또는 비밀번호가 올바르지 않습니다." });
+    }
+
+    res.json({ ok: true, user: pickUserResponse(profile) });
+  } catch (e) {
+    res.status(500).json({ error: "PASSWORD_LOGIN_ERROR", message: e.message });
+  }
+});
+
+app.post("/api/account/delete", async (req, res) => {
+  try {
+    const { firebaseIdToken, confirmUserId, confirmPassword } = req.body || {};
+    const requestedUserId = normalizeUserId(confirmUserId);
+    if (!requestedUserId) {
+      return res.status(400).json({
+        error: "USER_ID_CONFIRMATION_REQUIRED",
+        message: "회원 ID 확인값이 필요합니다."
+      });
+    }
+
+    let user = null;
+    if (firebaseIdToken) {
+      let firebaseAuth;
+      try {
+        firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
+      } catch (e) {
+        return res.status(401).json({ error: "FIREBASE_AUTH_REQUIRED", message: e.message });
+      }
+      const firebaseUidHash = hashLookup("firebaseUid", firebaseAuth.firebaseUid);
+      user = await User.findOne({ firebaseUidHash });
+    } else {
+      user = await User.findOne({ userIdHash: hashLookup("userId", requestedUserId) });
+    }
+
     if (!user?.encryptedProfile) {
       return res.status(404).json({ error: "USER_NOT_FOUND", message: "삭제할 회원정보가 없습니다." });
     }
@@ -731,11 +871,20 @@ app.post("/api/account/delete", async (req, res) => {
     const profile = decryptJson(user.encryptedProfile);
     const storedUserId = resolveProfileUserId(profile);
     const requestedUserId = normalizeUserId(confirmUserId);
+    
     if (!requestedUserId || requestedUserId !== storedUserId) {
       return res.status(400).json({
         error: "USER_ID_CONFIRMATION_MISMATCH",
         message: "회원 ID 확인값이 일치하지 않습니다."
       });
+    }
+    if (!firebaseIdToken) {
+      if (!confirmPassword || !verifyPasswordAuth(confirmPassword, profile.passwordAuth)) {
+        return res.status(401).json({
+          error: "PASSWORD_CONFIRMATION_FAILED",
+          message: "비밀번호 확인에 실패했습니다."
+        });
+      }
     }
 
     await User.deleteOne({ _id: user._id });
@@ -750,6 +899,7 @@ app.post("/api/account/delete", async (req, res) => {
 app.post("/api/register", async (req, res) => {
   try {
     const userData = await buildRegistrationProfile(req.body);
+    await assertUserIdIsAvailable(userData.userId);
 
     // 6자리 숫자 토큰 생성
     const token = String(Math.floor(100000 + randomBytes(3).readUIntBE(0, 3) % 900000));
@@ -774,24 +924,20 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/register/web", async (req, res) => {
   try {
     const userData = await buildRegistrationProfile(req.body);
+    requirePasswordAccount(userData);
     const encryptedUpdate = buildEncryptedUserUpdate(
       { ...userData, registrationSource: "web" },
       "",
       ""
     );
 
-    if (!encryptedUpdate.firebaseUidHash) {
-      return res.status(401).json({ error: "FIREBASE_AUTH_REQUIRED" });
-    }
+    await assertWebRegistrationIsNew(encryptedUpdate);
 
-    await User.findOneAndUpdate(
-      { firebaseUidHash: encryptedUpdate.firebaseUidHash },
+    await User.create(
       {
-        $set: encryptedUpdate,
-        $setOnInsert: { createdAt: new Date() },
-        $unset: LEGACY_USER_UNSET
-      },
-      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+        ...encryptedUpdate,
+        createdAt: new Date()
+      }
     );
 
     res.json({ ok: true, user: pickUserResponse(userData) });
@@ -819,24 +965,7 @@ app.post("/api/verify", async (req, res) => {
     // 사용자 저장 (검색용 해시 + 암호화된 프로필)
     const userData = decryptPendingUserData(pending);
     const encryptedUpdate = buildEncryptedUserUpdate(userData, discordId, guildId);
-    const existingDiscordUser = await User.findOne({ discordIdHash: encryptedUpdate.discordIdHash });
-    const existingFirebaseUser = encryptedUpdate.firebaseUidHash
-      ? await User.findOne({ firebaseUidHash: encryptedUpdate.firebaseUidHash })
-      : null;
-
-    if (
-      existingDiscordUser &&
-      existingFirebaseUser &&
-      String(existingDiscordUser._id) !== String(existingFirebaseUser._id)
-    ) {
-      return res.status(409).json({ error: "ACCOUNT_LINK_CONFLICT" });
-    }
-
-    const userFilter = existingDiscordUser
-      ? { _id: existingDiscordUser._id }
-      : existingFirebaseUser
-        ? { _id: existingFirebaseUser._id }
-        : { discordIdHash: encryptedUpdate.discordIdHash };
+    const userFilter = await resolveDiscordLinkTarget(encryptedUpdate);
 
     await User.findOneAndUpdate(
       userFilter,
@@ -855,7 +984,7 @@ app.post("/api/verify", async (req, res) => {
     if (e?.code === 11000) {
       return res.status(409).json({ error: "USER_ID_DUPLICATE", message: "이미 사용 중인 회원 ID입니다." });
     }
-    res.status(500).json({ error: "VERIFY_ERROR", message: e.message });
+    res.status(e.status || 500).json({ error: e.code || "VERIFY_ERROR", message: e.message });
   }
 });
 

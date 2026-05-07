@@ -66,6 +66,25 @@
     </section>
   </main>
 
+  <div id="deleteConfirmModal" class="modal account-delete-modal" aria-hidden="true">
+    <div class="modal-content account-delete-modal-content" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+      <div class="modal-top">
+        <strong id="deleteConfirmTitle">회원탈퇴 확인</strong>
+        <button id="deleteCancelBtn" type="button">닫기</button>
+      </div>
+      <p class="account-danger-note">탈퇴하려면 회원 ID와 비밀번호를 다시 입력하세요. Firebase 로그인 세션이 있으면 비밀번호는 생략할 수 있습니다.</p>
+      <label class="reg-label" for="deleteConfirmUserId">회원 ID</label>
+      <input id="deleteConfirmUserId" type="text" class="reg-input" autocomplete="username">
+      <label class="reg-label" for="deleteConfirmPassword">비밀번호</label>
+      <div class="password-field">
+        <input id="deleteConfirmPassword" type="password" class="reg-input" autocomplete="current-password">
+        <button class="password-toggle" type="button" data-password-toggle="deleteConfirmPassword" aria-controls="deleteConfirmPassword" aria-pressed="false">표시</button>
+      </div>
+      <div class="reg-msg" id="deleteConfirmMsg"></div>
+      <button class="reg-btn reg-btn-danger" id="deleteConfirmBtn" type="button">회원탈퇴 진행</button>
+    </div>
+  </div>
+
   <footer class="site-footer">
     <a href="/privacy">개인정보처리방침</a>
     <a href="/terms">이용약관</a>

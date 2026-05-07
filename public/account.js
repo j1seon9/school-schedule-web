@@ -5,6 +5,7 @@ const REDIRECTING_TO_LOCALHOST = window.location.hostname === "127.0.0.1";
 
 let firebaseAuth = null;
 let firebaseReadyPromise = null;
+let deleteModalResolver = null;
 
 if (REDIRECTING_TO_LOCALHOST) {
   const url = new URL(window.location.href);
@@ -43,6 +44,13 @@ function setStatus(message, isReady = false, isError = false) {
   el.textContent = message || "";
   el.classList.toggle("is-ready", isReady);
   el.classList.toggle("is-error", isError);
+}
+
+function setDeleteConfirmMessage(message, type = "") {
+  const el = qs("deleteConfirmMsg");
+  if (!el) return;
+  el.textContent = message || "";
+  el.className = `reg-msg ${type}`.trim();
 }
 
 function formatDateTime(value) {
@@ -141,6 +149,60 @@ async function logout() {
   window.location.href = "/";
 }
 
+function initPasswordToggles() {
+  document.querySelectorAll("[data-password-toggle]").forEach(button => {
+    const targetId = button.dataset.passwordToggle;
+    const input = qs(targetId);
+    if (!input) return;
+
+    input.type = "password";
+    button.textContent = "표시";
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => {
+      const shouldShow = input.type === "password";
+      input.type = shouldShow ? "text" : "password";
+      button.textContent = shouldShow ? "숨김" : "표시";
+      button.setAttribute("aria-pressed", String(shouldShow));
+    });
+  });
+}
+
+function closeDeleteConfirmModal(result = null) {
+  const modal = qs("deleteConfirmModal");
+  if (modal) modal.setAttribute("aria-hidden", "true");
+  if (deleteModalResolver) {
+    deleteModalResolver(result);
+    deleteModalResolver = null;
+  }
+}
+
+function openDeleteConfirmModal(userId, needsPassword) {
+  const modal = qs("deleteConfirmModal");
+  const userIdInput = qs("deleteConfirmUserId");
+  const passwordInput = qs("deleteConfirmPassword");
+  if (!modal || !userIdInput || !passwordInput) return Promise.resolve(null);
+
+  userIdInput.value = "";
+  passwordInput.value = "";
+  passwordInput.type = "password";
+  passwordInput.closest(".password-field").hidden = !needsPassword;
+  document.querySelector('label[for="deleteConfirmPassword"]').hidden = !needsPassword;
+  setDeleteConfirmMessage(needsPassword ? "ID/비밀번호 계정은 비밀번호 확인이 필요합니다." : "Firebase 로그인 세션이 확인되면 비밀번호 없이 탈퇴할 수 있습니다.");
+  modal.setAttribute("aria-hidden", "false");
+  userIdInput.placeholder = userId;
+  userIdInput.focus();
+
+  return new Promise(resolve => {
+    deleteModalResolver = resolve;
+  });
+}
+
+async function requestDeleteConfirmation(userId, needsPassword) {
+  const resultPromise = openDeleteConfirmModal(userId, needsPassword);
+  const result = await resultPromise;
+  return result;
+}
+
 async function deleteAccount() {
   const deleteBtn = qs("deleteAccountBtn");
   const user = readLoggedInUser();
@@ -151,24 +213,35 @@ async function deleteAccount() {
     return;
   }
 
-  if (!window.confirm("회원탈퇴 시 DB의 계정정보가 삭제됩니다. 계속할까요?")) return;
-
-  const typedUserId = window.prompt(`탈퇴하려면 회원 ID (${userId})를 입력하세요.`);
-  if (typedUserId === null) return;
-  if (typedUserId.trim() !== userId) {
-    setStatus("회원 ID가 일치하지 않아 탈퇴를 취소했습니다.", false, true);
-    return;
-  }
-
-  if (deleteBtn) deleteBtn.disabled = true;
-  setStatus("회원탈퇴를 처리하는 중입니다...");
+  let firebaseIdToken = "";
+  let confirmPassword = "";
+  let needsPassword = false;
 
   try {
-    const firebaseIdToken = await getFirebaseIdToken();
+    try {
+      firebaseIdToken = await getFirebaseIdToken();
+    } catch {
+      needsPassword = true;
+    }
+    const confirmation = await requestDeleteConfirmation(userId, needsPassword);
+    if (!confirmation) return;
+    if (confirmation.confirmUserId !== userId) {
+      setStatus("회원 ID가 일치하지 않아 탈퇴를 취소했습니다.", false, true);
+      return;
+    }
+    confirmPassword = confirmation.confirmPassword;
+    if (needsPassword && !confirmPassword) {
+      setStatus("비밀번호 확인이 없어 탈퇴를 취소했습니다.", false, true);
+      return;
+    }
+
+    if (deleteBtn) deleteBtn.disabled = true;
+    setStatus("회원탈퇴를 처리하는 중입니다...");
+
     const response = await fetch("/api/account/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ firebaseIdToken, confirmUserId: userId })
+      body: JSON.stringify({ firebaseIdToken, confirmUserId: confirmation.confirmUserId, confirmPassword })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || data.error || "회원탈퇴에 실패했습니다.");
@@ -190,7 +263,26 @@ async function deleteAccount() {
 
 document.addEventListener("DOMContentLoaded", () => {
   renderAccount();
+  initPasswordToggles();
   initFirebaseAuth();
   qs("logoutBtn")?.addEventListener("click", logout);
   qs("deleteAccountBtn")?.addEventListener("click", deleteAccount);
+  qs("deleteCancelBtn")?.addEventListener("click", () => closeDeleteConfirmModal(null));
+  qs("deleteConfirmModal")?.addEventListener("click", event => {
+    if (event.target === qs("deleteConfirmModal")) closeDeleteConfirmModal(null);
+  });
+  qs("deleteConfirmBtn")?.addEventListener("click", () => {
+    const confirmUserId = String(qs("deleteConfirmUserId")?.value || "").trim();
+    const confirmPassword = qs("deleteConfirmPassword")?.value || "";
+    if (!confirmUserId) {
+      setDeleteConfirmMessage("회원 ID를 입력하세요.", "error");
+      return;
+    }
+    closeDeleteConfirmModal({ confirmUserId, confirmPassword });
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && qs("deleteConfirmModal")?.getAttribute("aria-hidden") === "false") {
+      closeDeleteConfirmModal(null);
+    }
+  });
 });

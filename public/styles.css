@@ -324,6 +324,42 @@ button:disabled {
   border-color: var(--main-color);
 }
 
+.password-field {
+  position: relative;
+  width: 100%;
+}
+
+.password-field .reg-input {
+  padding-right: 76px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: auto;
+  min-width: 58px;
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 10px;
+  transform: translateY(-50%);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: #334155;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid rgba(255, 127, 80, 0.36);
+  outline-offset: 2px;
+}
+
+.account-delete-modal-content {
+  width: min(520px, 100%);
+}
+
 .reg-search-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1099,6 +1135,29 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.legal-modal-content {
+  width: min(720px, 100%);
+  overflow: hidden;
+}
+
+.legal-modal-body {
+  max-height: 58vh;
+  margin-top: 12px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-color);
+}
+
+.legal-modal-body .legal-hero {
+  margin-bottom: 14px;
+}
+
+.legal-modal-body .legal-section {
+  margin-bottom: 16px;
 }
 
 #schoolList {

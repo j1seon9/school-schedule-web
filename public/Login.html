@@ -19,12 +19,21 @@
         <div class="reg-step-title">로그인</div>
 
         <div class="reg-phone-box">
+          <label class="reg-label" for="loginUserId">회원 ID</label>
+          <input id="loginUserId" type="text" class="reg-input" placeholder="회원 ID" autocomplete="username">
+          <label class="reg-label" for="loginPassword">비밀번호</label>
+          <div class="password-field">
+            <input id="loginPassword" type="password" class="reg-input" placeholder="비밀번호" autocomplete="current-password">
+            <button class="password-toggle" type="button" data-password-toggle="loginPassword" aria-controls="loginPassword" aria-pressed="false">표시</button>
+          </div>
+          <button class="reg-btn reg-btn-main" id="passwordLoginBtn" type="button" onclick="loginWithPassword()">ID/비밀번호로 로그인</button>
+          <div class="reg-auth-divider">또는 Google / SMS 인증</div>
           <label class="reg-label">인증 방법</label>
           <button class="reg-btn reg-btn-outline reg-google-btn" id="googleLoginBtn" type="button" onclick="signInWithGoogle()" disabled>Google로 로그인</button>
           <div class="reg-auth-divider">또는 SMS 인증</div>
           <label class="reg-label" for="phoneNumber">휴대폰 번호 인증</label>
           <div class="reg-search-row">
-            <input id="phoneNumber" type="tel" class="reg-input" value="010-2125-7920" placeholder="010-2125-7920" autocomplete="tel">
+            <input id="phoneNumber" type="tel" class="reg-input" placeholder="010-1234-5678" autocomplete="tel">
             <button class="reg-btn reg-btn-outline" id="sendPhoneBtn" type="button" onclick="sendPhoneCode()">인증 문자 받기</button>
           </div>
           <div id="recaptchaContainer" class="reg-recaptcha"></div>

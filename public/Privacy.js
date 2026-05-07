@@ -13,18 +13,17 @@
 
   function getReturnPath() {
     try {
-      return new URLSearchParams(window.location.search).get("returnTo") || "/register";
+      return new URLSearchParams(window.location.search).get("returnTo") || "/";
     } catch {
-      return "/register";
+      return "/";
     }
   }
 
   function updateRegisterBackLinks() {
     const readNonce = getRegisterReadNonce();
-    if (!readNonce) return;
     const url = new URL(getReturnPath(), window.location.origin);
-    url.searchParams.set("readNonce", readNonce);
-    document.querySelectorAll('a[href="/register"], .legal-back').forEach(link => {
+    if (readNonce) url.searchParams.set("readNonce", readNonce);
+    document.querySelectorAll('a[href="/"], a[href="/register"], .legal-back').forEach(link => {
       link.href = `${url.pathname}${url.search}`;
     });
   }

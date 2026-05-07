@@ -1,10 +1,11 @@
 {
   "name": "school-schedule-app",
   "version": "2.1",
-  "description": "학교 시간표 및 급식 웹앱",
+  "description": "케토",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "node --check server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

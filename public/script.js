@@ -6,8 +6,23 @@ const favoriteListEl = qs("favoriteList");
 const favoriteSaveBtnEl = qs("favoriteSaveBtn");
 const favoriteEmptyEl = qs("favoriteEmpty");
 const searchBtnEl = qs("searchBtn");
-const OWNER_USER_ID = "j1s3on9";
+let ownerUserId = "example_admin";
 const LOGIN_USER_KEY = "schoolBotLoginUser";
+const REGISTER_DRAFT_KEY = "schoolBotRegisterDraft";
+
+function getRegisterUrl() {
+  try {
+    return sessionStorage.getItem(REGISTER_DRAFT_KEY) ? "/register?resume=1" : "/register";
+  } catch {
+    return "/register";
+  }
+}
+
+function updateRegisterLinks() {
+  document.querySelectorAll('a[href="/register"]').forEach(link => {
+    link.href = getRegisterUrl();
+  });
+}
 
 function readLoggedInUser() {
   try {
@@ -24,7 +39,7 @@ function applyAuthUi() {
   const userId = String(user?.userId || "").trim();
   const isLoggedIn = Boolean(user?.loggedInAt);
   const hasConfirmedUserId = isLoggedIn && Boolean(userId);
-  const isOwner = userId === OWNER_USER_ID;
+  const isOwner = userId === ownerUserId;
 
   qs("loginNavLink")?.classList.toggle("hidden", hasConfirmedUserId);
   qs("registerNavLink")?.classList.toggle("hidden", hasConfirmedUserId);
@@ -35,6 +50,17 @@ function applyAuthUi() {
   const idEl = qs("loginUserId");
   if (idEl) idEl.textContent = userId || "미설정";
   cardEl?.classList.toggle("hidden", !hasConfirmedUserId);
+}
+
+async function loadAppConfig() {
+  try {
+    const response = await fetch("/api/app-config", { cache: "no-store" });
+    if (!response.ok) return;
+    const config = await response.json();
+    ownerUserId = String(config.adminVisibleUserId || ownerUserId).trim();
+  } catch {
+    // Keep the example fallback if the config endpoint is unavailable.
+  }
 }
 
 function showLoading() {
@@ -875,6 +901,8 @@ window.loadMonthlyMeal = loadMonthlyMeal;
 
 document.addEventListener("DOMContentLoaded", async () => {
   initTheme();
+  updateRegisterLinks();
+  await loadAppConfig();
   applyAuthUi();
   initSchoolSearchEvents();
   bindSearchStateEvents();

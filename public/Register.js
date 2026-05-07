@@ -9,11 +9,13 @@ let phoneConfirmationResult = null;
 let firebaseIdToken = "";
 let firebaseAuthMethod = "";
 let firebaseClientConfig = null;
+let activeLegalModalType = "";
 const PRIVACY_READ_KEY = "schoolBotPrivacyReadAt";
 const TERMS_READ_KEY = "schoolBotTermsReadAt";
 const PRIVACY_READ_NONCE_KEY = "schoolBotPrivacyReadNonce";
 const TERMS_READ_NONCE_KEY = "schoolBotTermsReadNonce";
 const REGISTER_READ_NONCE_KEY = "schoolBotRegisterReadNonce";
+const REGISTER_DRAFT_KEY = "schoolBotRegisterDraft";
 const PRIVACY_READ_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const REDIRECTING_TO_LOCALHOST = window.location.hostname === "127.0.0.1";
 
@@ -91,14 +93,213 @@ function isRecentReadAt(readAt, nonceKey) {
 }
 
 function updateLegalLinks() {
-  document.querySelectorAll('a[href="/privacy"], a[href="/terms"]').forEach(link => {
+  document.querySelectorAll('a[href^="/privacy"], a[href^="/terms"]').forEach(link => {
     const path = link.getAttribute("href");
-    const url = new URL(path, window.location.origin);
-    url.searchParams.set("from", "register");
-    url.searchParams.set("readNonce", registerReadNonce);
-    url.searchParams.set("returnTo", "/register");
-    link.href = `${url.pathname}${url.search}`;
+    const pathname = new URL(path, window.location.origin).pathname;
+    const modalType = pathname === "/terms" ? "terms" : "privacy";
+    link.href = pathname;
+    link.dataset.legalModal = modalType;
+    link.removeAttribute("target");
+    if (!link.dataset.registerDraftBound) {
+      link.addEventListener("click", event => {
+        event.preventDefault();
+        saveRegisterDraft();
+        openLegalModal(modalType);
+      });
+      link.dataset.registerDraftBound = "true";
+    }
   });
+}
+
+function markLegalRead(type) {
+  const now = Date.now();
+  try {
+    if (type === "terms") {
+      localStorage.setItem(TERMS_READ_KEY, String(now));
+      localStorage.setItem(TERMS_READ_NONCE_KEY, registerReadNonce);
+    } else {
+      localStorage.setItem(PRIVACY_READ_KEY, String(now));
+      localStorage.setItem(PRIVACY_READ_NONCE_KEY, registerReadNonce);
+    }
+  } catch {
+    // Reading the modal still works even if local storage is unavailable.
+  }
+  updatePrivacyGate();
+}
+
+function hasReachedScrollEnd(el) {
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+}
+
+function updateLegalModalStatus(isReady = false) {
+  const statusEl = document.getElementById("legalModalStatus");
+  if (!statusEl) return;
+  statusEl.textContent = isReady
+    ? "전문 확인이 완료되었습니다. 동의 체크박스를 사용할 수 있습니다."
+    : "전문을 끝까지 스크롤하면 확인이 완료됩니다.";
+  statusEl.classList.toggle("is-ready", isReady);
+}
+
+function extractLegalContent(htmlText) {
+  const doc = new DOMParser().parseFromString(htmlText, "text/html");
+  const wrap = doc.querySelector(".legal-wrap");
+  if (!wrap) return "<p>전문을 불러오지 못했습니다.</p>";
+  wrap.querySelector(".legal-back")?.remove();
+  return wrap.innerHTML;
+}
+
+async function openLegalModal(type) {
+  activeLegalModalType = type === "terms" ? "terms" : "privacy";
+  const modal = document.getElementById("legalModal");
+  const titleEl = document.getElementById("legalModalTitle");
+  const bodyEl = document.getElementById("legalModalBody");
+  if (!modal || !titleEl || !bodyEl) return;
+
+  titleEl.textContent = activeLegalModalType === "terms" ? "이용약관" : "개인정보처리방침";
+  bodyEl.innerHTML = "<p>전문을 불러오는 중입니다...</p>";
+  bodyEl.dataset.legalLoaded = "false";
+  updateLegalModalStatus(false);
+  modal.setAttribute("aria-hidden", "false");
+  let loaded = false;
+
+  try {
+    const response = await fetch(activeLegalModalType === "terms" ? "/terms" : "/privacy", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    bodyEl.innerHTML = extractLegalContent(await response.text());
+    loaded = true;
+    bodyEl.dataset.legalLoaded = "true";
+  } catch {
+    bodyEl.innerHTML = "<p>전문을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</p>";
+  }
+
+  bodyEl.scrollTop = 0;
+  bodyEl.focus();
+  requestAnimationFrame(() => {
+    if (loaded && hasReachedScrollEnd(bodyEl)) {
+      markLegalRead(activeLegalModalType);
+      updateLegalModalStatus(true);
+    }
+  });
+}
+
+function closeLegalModal() {
+  const modal = document.getElementById("legalModal");
+  if (modal) modal.setAttribute("aria-hidden", "true");
+  activeLegalModalType = "";
+}
+
+function initLegalModal() {
+  const modal = document.getElementById("legalModal");
+  const bodyEl = document.getElementById("legalModalBody");
+  document.getElementById("legalModalClose")?.addEventListener("click", closeLegalModal);
+  modal?.addEventListener("click", event => {
+    if (event.target === modal) closeLegalModal();
+  });
+  bodyEl?.addEventListener("scroll", () => {
+    if (!activeLegalModalType || bodyEl.dataset.legalLoaded !== "true" || !hasReachedScrollEnd(bodyEl)) return;
+    markLegalRead(activeLegalModalType);
+    updateLegalModalStatus(true);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && modal?.getAttribute("aria-hidden") === "false") closeLegalModal();
+  });
+}
+
+function clearResumeQuery() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("resume")) return;
+    url.searchParams.delete("resume");
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(null, "", next || "/register");
+  } catch {
+    // Query cleanup is cosmetic; draft restore should continue even if it fails.
+  }
+}
+
+function readRegisterDraft() {
+  try {
+    const raw = sessionStorage.getItem(REGISTER_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeRegisterDraft(patch = {}) {
+  try {
+    const draft = {
+      ...readRegisterDraft(),
+      ...patch,
+      updatedAt: Date.now()
+    };
+    sessionStorage.setItem(REGISTER_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Draft restore is optional; registration can still continue without storage.
+  }
+}
+
+function clearRegisterDraft() {
+  try {
+    sessionStorage.removeItem(REGISTER_DRAFT_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function getCurrentStepId() {
+  const active = document.querySelector(".reg-step.active");
+  return active?.id || "step1";
+}
+
+function saveRegisterDraft() {
+  writeRegisterDraft({
+    currentStep: getCurrentStepId(),
+    selectedSchool,
+    schoolInput: document.getElementById("schoolInput")?.value || "",
+    grade: document.getElementById("grade")?.value || "",
+    classNo: document.getElementById("classNo")?.value || "",
+    userId: document.getElementById("userId")?.value || "",
+    phoneNumber: document.getElementById("phoneNumber")?.value || "",
+    agreeChecked: Boolean(document.getElementById("agreeCheck")?.checked),
+    termsAgreeChecked: Boolean(document.getElementById("termsAgreeCheck")?.checked),
+    ageChecked: Boolean(document.getElementById("ageCheck")?.checked)
+  });
+}
+
+function restoreRegisterDraft() {
+  const draft = readRegisterDraft();
+  if (!draft || Object.keys(draft).length === 0) return;
+
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (el && value !== undefined && value !== null) el.value = value;
+  };
+  const setChecked = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = Boolean(value);
+  };
+
+  selectedSchool = draft.selectedSchool || null;
+  setValue("schoolInput", draft.schoolInput);
+  setValue("grade", draft.grade);
+  setValue("classNo", draft.classNo);
+  setValue("userId", draft.userId);
+  setValue("phoneNumber", draft.phoneNumber);
+  setChecked("agreeCheck", draft.agreeChecked);
+  setChecked("termsAgreeCheck", draft.termsAgreeChecked);
+  setChecked("ageCheck", draft.ageChecked);
+
+  if (selectedSchool) {
+    const selectedEl = document.getElementById("selectedSchool");
+    const officeText = selectedSchool.officeName ? `, ${selectedSchool.officeName}` : "";
+    selectedEl.textContent = `${selectedSchool.name} (${selectedSchool.type || ""}${officeText})`;
+    selectedEl.style.display = "block";
+  }
+
+  if (draft.currentStep === "step2" && selectedSchool) {
+    showStep("step2", false);
+  }
 }
 
 function updatePrivacyGate() {
@@ -132,10 +333,11 @@ function updatePrivacyGate() {
     termsStatusEl.classList.toggle("is-ready", isTermsRead);
   }
   updateSubmitGate();
+  saveRegisterDraft();
 }
 
 function updateSubmitGate() {
-  const canSubmit = hasReadPrivacy() && hasReadTerms() && Boolean(firebaseIdToken);
+  const canSubmit = hasReadPrivacy() && hasReadTerms() && (Boolean(firebaseIdToken) || isPasswordAuthReady());
   const submitBtn = document.getElementById("submitBtn");
   const tokenSubmitBtn = document.getElementById("tokenSubmitBtn");
   if (submitBtn) submitBtn.disabled = !canSubmit;
@@ -154,6 +356,7 @@ function setFirebaseAuthToken(idToken, method, statusText) {
   firebaseAuthMethod = method || "";
   if (statusText) setPhoneStatus(statusText, Boolean(idToken));
   updateSubmitGate();
+  saveRegisterDraft();
 }
 
 function clearFirebaseAuthToken(statusText) {
@@ -161,6 +364,7 @@ function clearFirebaseAuthToken(statusText) {
   firebaseAuthMethod = "";
   if (statusText) setPhoneStatus(statusText);
   updateSubmitGate();
+  saveRegisterDraft();
 }
 
 function normalizePhoneNumber(value) {
@@ -214,6 +418,25 @@ async function initFirebaseAuth() {
       setPhoneStatus(`Google 인증 결과를 확인하지 못했습니다: ${e.message}`);
     }
 
+    if (!firebaseIdToken) {
+      try {
+        await new Promise(resolve => {
+          const unsubscribe = firebaseAuth.onAuthStateChanged(async user => {
+            unsubscribe();
+            if (user && !firebaseIdToken) {
+              const idToken = await user.getIdToken(true);
+              const providerIds = (user.providerData || []).map(provider => provider.providerId);
+              const method = providerIds.includes("google.com") ? "google" : "sms";
+              setFirebaseAuthToken(idToken, method, "Firebase 인증 세션이 복원되었습니다.");
+            }
+            resolve();
+          }, () => resolve());
+        });
+      } catch {
+        // A missing restored session should not block fresh SMS/Google authentication.
+      }
+    }
+
     try {
       recaptchaVerifier = new firebase.auth.RecaptchaVerifier("recaptchaContainer", {
         size: "normal"
@@ -245,16 +468,32 @@ async function signInWithGoogle() {
 
   const googleBtn = document.getElementById("googleAuthBtn");
   googleBtn.disabled = true;
-  clearFirebaseAuthToken("Google 인증 페이지로 이동합니다...");
+  clearFirebaseAuthToken("Google 인증 창을 여는 중입니다...");
 
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    await firebaseAuth.signInWithRedirect(provider);
+    const result = await firebaseAuth.signInWithPopup(provider);
+    if (!result?.user) throw new Error("GOOGLE_USER_MISSING");
+    const idToken = await result.user.getIdToken(true);
+    const email = result.user.email ? ` (${result.user.email})` : "";
+    setFirebaseAuthToken(idToken, "google", `Google 인증이 완료되었습니다${email}.`);
   } catch (e) {
     if (e.code === "auth/unauthorized-domain") {
       setPhoneStatus("Google 인증 허용 도메인 문제가 있습니다. 로컬은 http://localhost:8000/register 로 접속하거나 Firebase Authorized domains에 현재 도메인을 추가해 주세요.");
       return;
+    }
+    if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e.code)) {
+      try {
+        setPhoneStatus("팝업을 열 수 없어 Google 인증 페이지로 이동합니다...");
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+        await firebaseAuth.signInWithRedirect(provider);
+        return;
+      } catch (redirectError) {
+        setPhoneStatus(`Google 인증에 실패했습니다: ${redirectError.message}`);
+        return;
+      }
     }
     setPhoneStatus(`Google 인증에 실패했습니다: ${e.message}`);
   } finally {
@@ -270,7 +509,7 @@ async function sendPhoneCode() {
   const phoneInput = document.getElementById("phoneNumber");
   const phoneNumber = normalizePhoneNumber(phoneInput.value);
   if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
-    return setPhoneStatus("휴대폰 번호를 010-2125-7920 또는 +821021257920 형식으로 입력해 주세요.");
+    return setPhoneStatus("휴대폰 번호를 010-1234-5678 또는 +821012345678 형식으로 입력해 주세요.");
   }
   phoneInput.value = phoneNumber;
 
@@ -358,12 +597,13 @@ async function searchSchool() {
 function selectSchool(school, liEl) {
   selectedSchool = school;
   document.querySelectorAll(".reg-school-list li").forEach(el => el.classList.remove("selected"));
-  liEl.classList.add("selected");
+  if (liEl) liEl.classList.add("selected");
   const selectedEl = document.getElementById("selectedSchool");
   const officeText = school.officeName ? `, ${school.officeName}` : "";
   selectedEl.textContent = `✅ ${school.name} (${school.type}${officeText})`;
   selectedEl.style.display = "block";
   clearMsg("step1Msg");
+  saveRegisterDraft();
 }
 
 function goStep2() {
@@ -371,9 +611,13 @@ function goStep2() {
   const grade   = document.getElementById("grade").value.trim();
   const classNo = document.getElementById("classNo").value.trim();
   const userId = normalizeUserIdInput(document.getElementById("userId").value);
+  const password = document.getElementById("password").value;
+  const passwordConfirm = document.getElementById("passwordConfirm").value;
   if (!grade)   return showMsg("step1Msg", "학년을 입력하세요.", "error");
   if (!classNo) return showMsg("step1Msg", "반을 입력하세요.", "error");
   if (!isValidUserId(userId)) return showMsg("step1Msg", "회원 ID는 영문 소문자, 숫자, _, - 조합의 3~24자로 입력하세요.", "error");
+  if (!isValidPassword(password)) return showMsg("step1Msg", "비밀번호는 영문과 숫자를 포함한 8~72자로 입력하세요.", "error");
+  if (password !== passwordConfirm) return showMsg("step1Msg", "비밀번호 확인이 일치하지 않습니다.", "error");
   document.getElementById("userId").value = userId;
   clearMsg("step1Msg");
   updatePrivacyGate();
@@ -388,11 +632,23 @@ function isValidUserId(value) {
   return /^[a-z0-9_-]{3,24}$/.test(String(value || ""));
 }
 
+function isValidPassword(value) {
+  const password = String(value || "");
+  return password.length >= 8 && password.length <= 72 && /[A-Za-z]/.test(password) && /\d/.test(password);
+}
+
+function isPasswordAuthReady() {
+  const password = document.getElementById("password")?.value || "";
+  const passwordConfirm = document.getElementById("passwordConfirm")?.value || "";
+  return isValidPassword(password) && password === passwordConfirm;
+}
+
 function goStep1() { showStep("step1"); }
 
-function showStep(id) {
+function showStep(id, shouldSave = true) {
   document.querySelectorAll(".reg-step").forEach(el => el.classList.remove("active"));
   document.getElementById(id).classList.add("active");
+  if (shouldSave) saveRegisterDraft();
 }
 
 function setStep3Mode(mode) {
@@ -459,8 +715,8 @@ async function submitRegister(mode = "web") {
   if (!document.getElementById("ageCheck").checked) {
     return showMsg("step2Msg", "만 14세 이상인 경우에만 가입할 수 있습니다.", "error");
   }
-  if (!firebaseIdToken) {
-    return showMsg("step2Msg", "SMS 또는 Google 인증을 완료해 주세요.", "error");
+  if (!firebaseIdToken && !isPasswordAuthReady()) {
+    return showMsg("step2Msg", "ID/비밀번호를 확인하거나 SMS 또는 Google 인증을 완료해 주세요.", "error");
   }
 
   const isDiscordMode = mode === "discord";
@@ -480,6 +736,7 @@ async function submitRegister(mode = "web") {
       grade:      document.getElementById("grade").value.trim(),
       classNo:    document.getElementById("classNo").value.trim(),
       userId:     normalizeUserIdInput(document.getElementById("userId").value),
+      password:   document.getElementById("password").value,
       privacyAgreed: document.getElementById("agreeCheck").checked,
       privacyConfirmed: document.getElementById("agreeCheck").checked,
       termsAgreed: document.getElementById("termsAgreeCheck").checked,
@@ -509,7 +766,8 @@ async function submitRegister(mode = "web") {
       tokenValue = "";
       persistRegisteredUser(data.user || {});
     }
-    showStep("step3");
+    clearRegisterDraft();
+    showStep("step3", false);
   } catch {
     showMsg("step2Msg", "서버 연결에 실패했습니다.", "error");
   } finally {
@@ -565,13 +823,43 @@ function resetAgreementChecks() {
   });
 }
 
+function initPasswordToggles() {
+  document.querySelectorAll("[data-password-toggle]").forEach(button => {
+    const targetId = button.dataset.passwordToggle;
+    const input = document.getElementById(targetId);
+    if (!input) return;
+
+    input.type = "password";
+    button.textContent = "표시";
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => {
+      const shouldShow = input.type === "password";
+      input.type = shouldShow ? "text" : "password";
+      button.textContent = shouldShow ? "숨김" : "표시";
+      button.setAttribute("aria-pressed", String(shouldShow));
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   updateLegalLinks();
-  resetAgreementChecks();
+  initLegalModal();
+  initPasswordToggles();
+  restoreRegisterDraft();
+  clearResumeQuery();
   updatePrivacyGate();
   initFirebaseAuth();
   document.getElementById("schoolInput").addEventListener("keydown", e => {
     if (e.key === "Enter") searchSchool();
+  });
+  ["schoolInput", "grade", "classNo", "userId", "password", "passwordConfirm", "phoneNumber", "phoneCode"].forEach(id => {
+    document.getElementById(id)?.addEventListener("input", () => {
+      saveRegisterDraft();
+      updateSubmitGate();
+    });
+  });
+  ["agreeCheck", "termsAgreeCheck", "ageCheck"].forEach(id => {
+    document.getElementById(id)?.addEventListener("change", saveRegisterDraft);
   });
   document.getElementById("phoneNumber").addEventListener("input", () => {
     phoneConfirmationResult = null;
@@ -586,7 +874,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-window.addEventListener("focus", updatePrivacyGate);
+window.addEventListener("focus", () => {
+  restoreRegisterDraft();
+  updatePrivacyGate();
+});
+window.addEventListener("pagehide", saveRegisterDraft);
+window.addEventListener("beforeunload", saveRegisterDraft);
 window.addEventListener("storage", e => {
   if (
     e.key === PRIVACY_READ_KEY ||

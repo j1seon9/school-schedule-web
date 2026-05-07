@@ -46,6 +46,18 @@
         <input id="userId" type="text" class="reg-input" placeholder="예: example_ID" maxlength="24" autocomplete="username">
         <div class="muted">영문 소문자, 숫자, _, - 조합의 3~24자로 입력하세요.</div>
 
+        <label class="reg-label" for="password">비밀번호</label>
+        <div class="password-field">
+          <input id="password" type="password" class="reg-input" placeholder="영문과 숫자 포함 8자 이상" maxlength="72" autocomplete="new-password">
+          <button class="password-toggle" type="button" data-password-toggle="password" aria-controls="password" aria-pressed="false">표시</button>
+        </div>
+        <label class="reg-label" for="passwordConfirm">비밀번호 확인</label>
+        <div class="password-field">
+          <input id="passwordConfirm" type="password" class="reg-input" placeholder="비밀번호 다시 입력" maxlength="72" autocomplete="new-password">
+          <button class="password-toggle" type="button" data-password-toggle="passwordConfirm" aria-controls="passwordConfirm" aria-pressed="false">표시</button>
+        </div>
+        <div class="muted">Google/SMS 없이도 로그인할 수 있도록 ID/비밀번호 계정이 함께 생성됩니다.</div>
+
         <div class="reg-msg" id="step1Msg"></div>
         <button class="reg-btn reg-btn-main" onclick="goStep2()">다음</button>
       </div>
@@ -67,7 +79,7 @@
           회원 탈퇴 또는 학교 설정 삭제 시까지<br><br>
           <strong>거부 권리</strong><br>
           동의를 거부할 수 있으나, 거부 시 서비스 이용이 제한됩니다.<br><br>
-          자세한 내용은 <a href="/privacy" target="_blank">개인정보처리방침</a>을 확인하세요.
+          자세한 내용은 <a href="/privacy" data-legal-modal="privacy">개인정보처리방침</a>을 확인하세요.
         </div>
 
         <div class="reg-privacy-status" id="privacyStatus"></div>
@@ -79,7 +91,7 @@
           본인의 인증 수단을 사용해야 하며, 타인의 정보 또는 허위 정보를 입력하면 서비스 이용이 제한될 수 있습니다.<br><br>
           <strong>서비스 제한</strong><br>
           포트폴리오용 서비스이므로 장애, 외부 API 변경, 운영 사정에 따라 일부 기능이 중단될 수 있습니다.<br><br>
-          자세한 내용은 <a href="/terms" target="_blank">이용약관</a>을 확인하세요.
+          자세한 내용은 <a href="/terms" data-legal-modal="terms">이용약관</a>을 확인하세요.
         </div>
 
         <div class="reg-privacy-status" id="termsStatus"></div>
@@ -98,18 +110,18 @@
             <input id="phoneCode" type="text" class="reg-input" placeholder="인증번호 6자리" inputmode="numeric" autocomplete="one-time-code">
             <button class="reg-btn reg-btn-outline" id="confirmPhoneBtn" type="button" onclick="confirmPhoneCode()" disabled>인증 확인</button>
           </div>
-          <div class="reg-phone-status" id="phoneStatus">Firebase 휴대폰 인증을 완료해야 가입할 수 있습니다.</div>
+          <div class="reg-phone-status" id="phoneStatus">ID/비밀번호만으로 가입하거나 SMS/Google 인증을 추가로 완료할 수 있습니다.</div>
         </div>
 
         <div class="reg-agree-row">
           <input type="checkbox" id="agreeCheck" disabled>
           <label for="agreeCheck">개인정보 수집 및 이용에 동의합니다.</label>
-          <a href="/privacy" target="_blank">[전문 보기]</a>
+          <a href="/privacy" data-legal-modal="privacy">[전문 보기]</a>
         </div>
         <div class="reg-agree-row">
           <input type="checkbox" id="termsAgreeCheck" disabled>
           <label for="termsAgreeCheck">이용약관에 동의합니다.</label>
-          <a href="/terms" target="_blank">[전문 보기]</a>
+          <a href="/terms" data-legal-modal="terms">[전문 보기]</a>
         </div>
         <div class="reg-agree-row">
           <input type="checkbox" id="ageCheck">
@@ -147,9 +159,20 @@
     </div>
   </div>
 
+  <div id="legalModal" class="modal legal-modal" aria-hidden="true">
+    <div class="modal-content legal-modal-content" role="dialog" aria-modal="true" aria-labelledby="legalModalTitle">
+      <div class="modal-top">
+        <strong id="legalModalTitle">전문 보기</strong>
+        <button id="legalModalClose" type="button">닫기</button>
+      </div>
+      <div id="legalModalBody" class="legal-modal-body" tabindex="0"></div>
+      <div id="legalModalStatus" class="reg-privacy-status"></div>
+    </div>
+  </div>
+
   <footer class="site-footer">
-    <a href="/privacy">개인정보처리방침</a>
-    <a href="/terms">이용약관</a>
+    <a href="/privacy" data-legal-modal="privacy">개인정보처리방침</a>
+    <a href="/terms" data-legal-modal="terms">이용약관</a>
     <a href="https://discord.gg/2JbvBa2ykP" target="_blank" rel="noopener noreferrer">문의</a>
   </footer>
 
