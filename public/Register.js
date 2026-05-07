@@ -337,7 +337,11 @@ function updatePrivacyGate() {
 }
 
 function updateSubmitGate() {
-  const canSubmit = hasReadPrivacy() && hasReadTerms() && (Boolean(firebaseIdToken) || isPasswordAuthReady());
+  const canSubmit =
+    isRegistrationBasicsReady() &&
+    hasReadPrivacy() &&
+    hasReadTerms() &&
+    (Boolean(firebaseIdToken) || isPasswordAuthReady());
   const submitBtn = document.getElementById("submitBtn");
   const tokenSubmitBtn = document.getElementById("tokenSubmitBtn");
   if (submitBtn) submitBtn.disabled = !canSubmit;
@@ -607,18 +611,7 @@ function selectSchool(school, liEl) {
 }
 
 function goStep2() {
-  if (!selectedSchool) return showMsg("step1Msg", "학교를 선택하세요.", "error");
-  const grade   = document.getElementById("grade").value.trim();
-  const classNo = document.getElementById("classNo").value.trim();
-  const userId = normalizeUserIdInput(document.getElementById("userId").value);
-  const password = document.getElementById("password").value;
-  const passwordConfirm = document.getElementById("passwordConfirm").value;
-  if (!grade)   return showMsg("step1Msg", "학년을 입력하세요.", "error");
-  if (!classNo) return showMsg("step1Msg", "반을 입력하세요.", "error");
-  if (!isValidUserId(userId)) return showMsg("step1Msg", "회원 ID는 영문 소문자, 숫자, _, - 조합의 3~24자로 입력하세요.", "error");
-  if (!isValidPassword(password)) return showMsg("step1Msg", "비밀번호는 영문과 숫자를 포함한 8~72자로 입력하세요.", "error");
-  if (password !== passwordConfirm) return showMsg("step1Msg", "비밀번호 확인이 일치하지 않습니다.", "error");
-  document.getElementById("userId").value = userId;
+  if (!validateRegistrationBasics("step1Msg")) return;
   clearMsg("step1Msg");
   updatePrivacyGate();
   showStep("step2");
@@ -641,6 +634,63 @@ function isPasswordAuthReady() {
   const password = document.getElementById("password")?.value || "";
   const passwordConfirm = document.getElementById("passwordConfirm")?.value || "";
   return isValidPassword(password) && password === passwordConfirm;
+}
+
+function focusRegisterField(id) {
+  const field = document.getElementById(id);
+  if (!field) return;
+  field.focus();
+  if (typeof field.select === "function") field.select();
+}
+
+function isRegistrationBasicsReady() {
+  const grade = document.getElementById("grade")?.value.trim() || "";
+  const classNo = document.getElementById("classNo")?.value.trim() || "";
+  const userId = normalizeUserIdInput(document.getElementById("userId")?.value || "");
+  return Boolean(selectedSchool?.schoolCode && selectedSchool?.officeCode) &&
+    Boolean(grade) &&
+    Boolean(classNo) &&
+    isValidUserId(userId) &&
+    isPasswordAuthReady();
+}
+
+function validateRegistrationBasics(messageId, options = {}) {
+  const { returnToStep1 = false } = options;
+  const targetMessageId = returnToStep1 ? "step1Msg" : messageId;
+  const showAndFocus = (message, fieldId) => {
+    if (returnToStep1) showStep("step1", false);
+    showMsg(targetMessageId, message, "error");
+    if (fieldId) focusRegisterField(fieldId);
+    return false;
+  };
+
+  if (!selectedSchool?.schoolCode || !selectedSchool?.officeCode) {
+    if (returnToStep1) showStep("step1", false);
+    showMsg(targetMessageId, "학교를 먼저 검색하고 선택해 주세요.", "error");
+    focusRegisterField("schoolInput");
+    return false;
+  }
+
+  const grade = document.getElementById("grade")?.value.trim() || "";
+  const classNo = document.getElementById("classNo")?.value.trim() || "";
+  const userId = normalizeUserIdInput(document.getElementById("userId")?.value || "");
+  const password = document.getElementById("password")?.value || "";
+  const passwordConfirm = document.getElementById("passwordConfirm")?.value || "";
+
+  if (!grade) return showAndFocus("학년을 입력해 주세요.", "grade");
+  if (!classNo) return showAndFocus("반을 입력해 주세요.", "classNo");
+  if (!isValidUserId(userId)) {
+    return showAndFocus("회원 ID는 영문 소문자, 숫자, _, - 조합의 3~24자로 입력해 주세요.", "userId");
+  }
+  if (!isValidPassword(password)) {
+    return showAndFocus("비밀번호는 영문과 숫자를 포함해 8~72자로 입력해 주세요.", "password");
+  }
+  if (password !== passwordConfirm) {
+    return showAndFocus("비밀번호 확인이 일치하지 않습니다.", "passwordConfirm");
+  }
+
+  document.getElementById("userId").value = userId;
+  return true;
 }
 
 function goStep1() { showStep("step1"); }
@@ -698,6 +748,7 @@ function persistRegisteredUser(user) {
 }
 
 async function submitRegister(mode = "web") {
+  if (!validateRegistrationBasics("step2Msg", { returnToStep1: true })) return;
   if (!hasReadPrivacy()) {
     updatePrivacyGate();
     return showMsg("step2Msg", "개인정보처리방침 전문을 먼저 끝까지 확인해 주세요.", "error");
@@ -849,6 +900,7 @@ document.addEventListener("DOMContentLoaded", () => {
   clearResumeQuery();
   updatePrivacyGate();
   initFirebaseAuth();
+  document.getElementById("searchBtn")?.addEventListener("click", searchSchool);
   document.getElementById("schoolInput").addEventListener("keydown", e => {
     if (e.key === "Enter") searchSchool();
   });

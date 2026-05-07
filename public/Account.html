@@ -57,6 +57,22 @@
 
         <button class="reg-btn reg-btn-outline" id="logoutBtn" type="button">로그아웃</button>
 
+        <div class="account-token-zone">
+          <p class="account-token-note">Discord 봇 연동 토큰은 5분 동안 유효합니다. ID/비밀번호 계정은 비밀번호를 입력한 뒤 재발급하세요.</p>
+          <label class="reg-label" for="reissueTokenPassword">비밀번호 확인</label>
+          <div class="password-field">
+            <input id="reissueTokenPassword" type="password" class="reg-input" autocomplete="current-password" placeholder="Firebase 로그인 세션이 있으면 생략 가능">
+            <button class="password-toggle" type="button" data-password-toggle="reissueTokenPassword" aria-controls="reissueTokenPassword" aria-pressed="false">표시</button>
+          </div>
+          <button class="reg-btn reg-btn-outline" id="reissueTokenBtn" type="button">Discord 토큰 재발급</button>
+          <div class="reg-token-box" id="accountTokenBox" hidden>
+            <div class="reg-token-label">Discord 봇 인증 토큰</div>
+            <div class="reg-token-value" id="accountTokenValue">------</div>
+            <button class="reg-token-copy" id="accountTokenCopyBtn" type="button">📋 복사하기</button>
+            <div class="reg-timer" id="accountTokenTimer">⏱ 5:00 후 만료</div>
+          </div>
+        </div>
+
         <div class="account-danger-zone">
           <p class="account-danger-note">회원탈퇴 시 MongoDB에 저장된 회원정보가 삭제됩니다.</p>
           <button class="reg-btn reg-btn-danger" id="deleteAccountBtn" type="button">회원탈퇴</button>

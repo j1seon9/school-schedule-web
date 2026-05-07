@@ -6,6 +6,8 @@ const REDIRECTING_TO_LOCALHOST = window.location.hostname === "127.0.0.1";
 let firebaseAuth = null;
 let firebaseReadyPromise = null;
 let deleteModalResolver = null;
+let accountTokenValue = "";
+let accountTokenTimerInterval = null;
 
 if (REDIRECTING_TO_LOCALHOST) {
   const url = new URL(window.location.href);
@@ -261,12 +263,98 @@ async function deleteAccount() {
   }
 }
 
+function setAccountToken(token) {
+  accountTokenValue = token || "";
+  const box = qs("accountTokenBox");
+  const valueEl = qs("accountTokenValue");
+  if (valueEl) valueEl.textContent = accountTokenValue || "------";
+  if (box) box.hidden = !accountTokenValue;
+}
+
+function startAccountTokenTimer(seconds) {
+  if (accountTokenTimerInterval) clearInterval(accountTokenTimerInterval);
+  let remaining = seconds;
+  const timerEl = qs("accountTokenTimer");
+  function update() {
+    const m = String(Math.floor(remaining / 60)).padStart(2, "0");
+    const s = String(remaining % 60).padStart(2, "0");
+    if (timerEl) timerEl.textContent = `⏱ ${m}:${s} 후 만료`;
+    if (remaining <= 0) {
+      clearInterval(accountTokenTimerInterval);
+      if (timerEl) timerEl.textContent = "⛔ 토큰이 만료되었습니다. 다시 재발급해 주세요.";
+    }
+    remaining -= 1;
+  }
+  update();
+  accountTokenTimerInterval = setInterval(update, 1000);
+}
+
+async function reissueDiscordToken() {
+  const btn = qs("reissueTokenBtn");
+  const user = readLoggedInUser();
+  const userId = String(user?.userId || "").trim();
+  if (!user?.loggedInAt || !userId) {
+    setStatus("로그인 정보가 없습니다. 다시 로그인해 주세요.", false, true);
+    return;
+  }
+
+  let firebaseIdToken = "";
+  try {
+    firebaseIdToken = await getFirebaseIdToken();
+  } catch {
+    firebaseIdToken = "";
+  }
+
+  const confirmPassword = qs("reissueTokenPassword")?.value || "";
+  if (!firebaseIdToken && !confirmPassword) {
+    setStatus("Firebase 세션이 없으면 비밀번호를 입력해야 토큰을 재발급할 수 있습니다.", false, true);
+    qs("reissueTokenPassword")?.focus();
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  setStatus("Discord 연동 토큰을 재발급하는 중입니다...");
+  try {
+    const response = await fetch("/api/account/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ firebaseIdToken, confirmUserId: userId, confirmPassword })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || data.error || "토큰 재발급에 실패했습니다.");
+
+    setAccountToken(data.token);
+    startAccountTokenTimer(5 * 60);
+    setStatus("Discord 연동 토큰이 재발급되었습니다.", true, false);
+    const passwordInput = qs("reissueTokenPassword");
+    if (passwordInput) passwordInput.value = "";
+  } catch (e) {
+    setStatus(e.message, false, true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function copyAccountToken() {
+  if (!accountTokenValue) return;
+  navigator.clipboard.writeText(accountTokenValue).then(() => {
+    const btn = qs("accountTokenCopyBtn");
+    if (!btn) return;
+    btn.textContent = "✅ 복사됨!";
+    setTimeout(() => {
+      btn.textContent = "📋 복사하기";
+    }, 2000);
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   renderAccount();
   initPasswordToggles();
   initFirebaseAuth();
   qs("logoutBtn")?.addEventListener("click", logout);
   qs("deleteAccountBtn")?.addEventListener("click", deleteAccount);
+  qs("reissueTokenBtn")?.addEventListener("click", reissueDiscordToken);
+  qs("accountTokenCopyBtn")?.addEventListener("click", copyAccountToken);
   qs("deleteCancelBtn")?.addEventListener("click", () => closeDeleteConfirmModal(null));
   qs("deleteConfirmModal")?.addEventListener("click", event => {
     if (event.target === qs("deleteConfirmModal")) closeDeleteConfirmModal(null);

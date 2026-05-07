@@ -54,6 +54,12 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--card-bg);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
 }
 
 .header h1 {
@@ -62,10 +68,24 @@ body {
   line-height: 1.2;
 }
 
+.header ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  justify-content: flex-end;
+}
+
+.header-actions .admin-link,
+.header-actions button {
+  width: auto;
+  flex: 0 0 auto;
+  margin-bottom: 0;
 }
 
 .admin-link {
@@ -178,6 +198,19 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
+.account-token-zone {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.account-token-note {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .account-danger-note {
   margin: 0;
   color: #991b1b;
@@ -215,6 +248,10 @@ button {
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  touch-action: manipulation;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 button:disabled {
@@ -263,6 +300,11 @@ button:disabled {
 .reg-logo {
   text-align: center;
   margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--card-bg);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
 }
 
 .reg-logo h1 {
@@ -1137,6 +1179,13 @@ button:disabled {
   gap: 8px;
 }
 
+.modal-top button {
+  width: auto;
+  min-width: 72px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
 .legal-modal-content {
   width: min(720px, 100%);
   overflow: hidden;
@@ -1222,17 +1271,32 @@ button:disabled {
 /* Mobile layout */
 @media (max-width: 768px) {
   .container {
-    padding: 10px 10px calc(82px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 10px calc(18px + env(safe-area-inset-bottom, 0px));
   }
 
   .header {
     flex-direction: column;
     align-items: stretch;
+    padding: 12px;
+  }
+
+  .header h1 {
+    overflow-wrap: anywhere;
+  }
+
+  .reg-logo {
+    padding: 14px;
   }
 
   .header-actions {
-    justify-content: flex-end;
+    justify-content: stretch;
     flex-wrap: wrap;
+  }
+
+  .header-actions .admin-link,
+  .header-actions button {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 132px;
   }
 
   .admin-link {
@@ -1278,24 +1342,40 @@ button:disabled {
     border-radius: 10px;
   }
 
+  .modal-top {
+    align-items: stretch;
+  }
+
+  .modal-top button {
+    min-height: 44px;
+  }
+
+  .login-choice-row {
+    grid-template-columns: 1fr;
+  }
+
+  .favorites-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .favorites-header button,
+  .favorite-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .favorite-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
   .action-bar {
-    display: flex;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 20;
-    gap: 6px;
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
-    background: var(--card-bg);
-    border-top: 1px solid var(--border-color);
+    display: none;
   }
 
   .action-bar button {
-    margin: 0;
-    min-height: 46px;
-    border-radius: 10px;
-    flex: 1;
+    display: none;
   }
 }
 

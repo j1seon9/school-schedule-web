@@ -13,6 +13,10 @@
 
   function getReturnPath() {
     try {
+      const referrerUrl = new URL(document.referrer || "", window.location.origin);
+      if (referrerUrl.origin === window.location.origin && referrerUrl.pathname !== window.location.pathname) {
+        return `${referrerUrl.pathname}${referrerUrl.search}`;
+      }
       return new URLSearchParams(window.location.search).get("returnTo") || "/";
     } catch {
       return "/";

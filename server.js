@@ -563,6 +563,21 @@ function requirePasswordAccount(profile) {
   }
 }
 
+async function createPendingToken(userData) {
+  const token = String(Math.floor(100000 + randomBytes(3).readUIntBE(0, 3) % 900000));
+  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
+
+  await PendingToken.findOneAndDelete({ token });
+  await PendingToken.create({
+    token,
+    encryptedUserData: encryptJson(userData),
+    expiresAt
+  });
+  await PendingToken.deleteMany({ expiresAt: { $lt: new Date() } });
+
+  return { token, expiresAt };
+}
+
 async function assertUserIdIsAvailable(userId) {
   const normalizedUserId = normalizeUserId(userId);
   if (!normalizedUserId) return;
@@ -870,8 +885,6 @@ app.post("/api/account/delete", async (req, res) => {
 
     const profile = decryptJson(user.encryptedProfile);
     const storedUserId = resolveProfileUserId(profile);
-    const requestedUserId = normalizeUserId(confirmUserId);
-    
     if (!requestedUserId || requestedUserId !== storedUserId) {
       return res.status(400).json({
         error: "USER_ID_CONFIRMATION_MISMATCH",
@@ -895,25 +908,59 @@ app.post("/api/account/delete", async (req, res) => {
   }
 });
 
+app.post("/api/account/token", async (req, res) => {
+  try {
+    const { firebaseIdToken, confirmUserId, confirmPassword } = req.body || {};
+    const requestedUserId = normalizeUserId(confirmUserId);
+    if (!requestedUserId) {
+      return res.status(400).json({ error: "USER_ID_REQUIRED", message: "회원 ID가 필요합니다." });
+    }
+
+    let user = null;
+    if (firebaseIdToken) {
+      let firebaseAuth;
+      try {
+        firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
+      } catch {
+        return res.status(401).json({ error: "FIREBASE_AUTH_INVALID", message: "Firebase 인증 확인에 실패했습니다." });
+      }
+      user = await User.findOne({ firebaseUidHash: hashLookup("firebaseUid", firebaseAuth.firebaseUid) });
+    }
+    if (!user) {
+      user = await User.findOne({ userIdHash: hashLookup("userId", requestedUserId) });
+    }
+    if (!user) return res.status(404).json({ error: "USER_NOT_FOUND", message: "회원정보가 없습니다." });
+
+    const profile = decryptJson(user.encryptedProfile);
+    const storedUserId = resolveProfileUserId(profile);
+    if (storedUserId !== requestedUserId) {
+      return res.status(403).json({ error: "USER_ID_MISMATCH", message: "회원 ID가 일치하지 않습니다." });
+    }
+
+    if (!firebaseIdToken) {
+      if (!verifyPasswordAuth(confirmPassword, profile.passwordAuth)) {
+        return res.status(401).json({ error: "PASSWORD_CONFIRMATION_FAILED", message: "비밀번호 확인에 실패했습니다." });
+      }
+    }
+
+    const { token, expiresAt } = await createPendingToken({
+      ...profile,
+      userId: storedUserId,
+      tokenReissuedAt: new Date().toISOString()
+    });
+    res.json({ ok: true, token, expiresAt });
+  } catch (e) {
+    res.status(500).json({ error: "TOKEN_REISSUE_ERROR", message: e.message });
+  }
+});
+
 // 회원가입 처리 → 임시 토큰 발급
 app.post("/api/register", async (req, res) => {
   try {
     const userData = await buildRegistrationProfile(req.body);
     await assertUserIdIsAvailable(userData.userId);
 
-    // 6자리 숫자 토큰 생성
-    const token = String(Math.floor(100000 + randomBytes(3).readUIntBE(0, 3) % 900000));
-    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
-
-    await PendingToken.findOneAndDelete({ token }); // 혹시 중복이면 삭제
-    await PendingToken.create({
-      token,
-      encryptedUserData: encryptJson(userData),
-      expiresAt
-    });
-
-    // 만료된 토큰 정리
-    await PendingToken.deleteMany({ expiresAt: { $lt: new Date() } });
+    const { token, expiresAt } = await createPendingToken(userData);
 
     res.json({ ok: true, token, expiresAt });
   } catch (e) {
@@ -1225,8 +1272,18 @@ app.get("/api/monthlyMeal", async (req, res) => {
 });
 
 // ── 서버 시작 ─────────────────────────────────────────────
-initDb().finally(() => {
+function startHttpServer() {
   app.listen(PORT, () => {
     console.log(`Server running on ${PORT}`);
   });
-});
+}
+
+function startBackgroundServices() {
+  initDb().catch(error => {
+    dbConnected = false;
+    console.error(`MongoDB background init failed: ${error.message}`);
+  });
+}
+
+startHttpServer();
+startBackgroundServices();
