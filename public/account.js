@@ -15,6 +15,8 @@ if (REDIRECTING_TO_LOCALHOST) {
   window.location.replace(url.toString());
 }
 
+// ── Local account state and rendering ─────────────────────
+
 function qs(id) {
   return document.getElementById(id);
 }
@@ -79,6 +81,8 @@ function renderAccount() {
   setText("accountClassNo", user.classNo ? `${user.classNo}반` : "");
   setText("accountLoggedInAt", formatDateTime(user.loggedInAt));
 }
+
+// ── Firebase session helpers ──────────────────────────────
 
 async function waitForAuthState(auth) {
   return new Promise(resolve => {
@@ -168,6 +172,8 @@ function initPasswordToggles() {
     });
   });
 }
+
+// ── Account deletion flow ─────────────────────────────────
 
 function closeDeleteConfirmModal(result = null) {
   const modal = qs("deleteConfirmModal");
@@ -263,6 +269,8 @@ async function deleteAccount() {
   }
 }
 
+// ── Discord token reissue flow ────────────────────────────
+
 function setAccountToken(token) {
   accountTokenValue = token || "";
   const box = qs("accountTokenBox");
@@ -346,6 +354,8 @@ function copyAccountToken() {
     }, 2000);
   });
 }
+
+// ── Page initialization ───────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
   renderAccount();

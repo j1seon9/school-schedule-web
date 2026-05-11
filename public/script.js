@@ -10,6 +10,8 @@ let ownerUserId = "example_admin";
 const LOGIN_USER_KEY = "schoolBotLoginUser";
 const REGISTER_DRAFT_KEY = "schoolBotRegisterDraft";
 
+// ── Login-aware navigation ────────────────────────────────
+
 function getRegisterUrl() {
   try {
     return sessionStorage.getItem(REGISTER_DRAFT_KEY) ? "/register?resume=1" : "/register";
@@ -62,6 +64,8 @@ async function loadAppConfig() {
     // Keep the example fallback if the config endpoint is unavailable.
   }
 }
+
+// ── Shared UI and date helpers ────────────────────────────
 
 function showLoading() {
   loadingEl?.classList.remove("hidden");
@@ -202,6 +206,8 @@ function renderWeeklyGrid(weeklyGridEl, rows, startDate) {
   });
 }
 
+// ── Meal parsing and allergy display ──────────────────────
+
 function splitMealMenu(rawMenu) {
   const normalized = String(rawMenu || "")
     .replace(/&lt;\s*\/?br\s*\/?&gt;/gi, "\n")
@@ -256,6 +262,8 @@ function showAllergyInfo(item) {
   const info = codes.length > 0 ? codes.join(", ") : "정보 없음";
   alert(`${name}\n알레르기 번호: ${info}`);
 }
+
+// ── School selection and persisted search state ───────────
 
 function getSelectedClassInfo() {
   return {
@@ -374,6 +382,8 @@ function bindSearchStateEvents() {
     });
   });
 }
+
+// ── Favorites ─────────────────────────────────────────────
 
 const FAVORITE_KEY = "favorite.list.v1";
 const FAVORITE_LIMIT = 3;
@@ -584,6 +594,8 @@ function handleSearchClick() {
   autoQuery();
 }
 
+// ── Theme, notices, and school modal ──────────────────────
+
 function applyTheme(theme) {
   const toggleEl = qs("darkModeToggle");
   document.documentElement.dataset.theme = theme;
@@ -679,6 +691,8 @@ async function searchSchool() {
     hideLoading();
   }
 }
+
+// ── NEIS data loading ─────────────────────────────────────
 
 async function loadToday() {
   const { schoolCode, officeCode, grade, classNo } = getSelectedClassInfo();
@@ -894,6 +908,8 @@ function initSchoolSearchEvents() {
     if (event.key === "Escape") closeSchoolModal();
   });
 }
+
+// ── Page initialization ───────────────────────────────────
 
 window.loadToday = loadToday;
 window.loadWeekly = loadWeekly;

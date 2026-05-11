@@ -13,6 +13,8 @@ import mongoose from "mongoose";
 dotenv.config();
 mongoose.set("strictQuery", true);
 
+// ── Runtime configuration ─────────────────────────────────
+
 const API_KEY     = (process.env.API_KEY     || "").trim();
 const PORT        = Number(process.env.PORT  || 8000);
 const BASE_URL    = "https://open.neis.go.kr/hub";
@@ -49,6 +51,8 @@ const ADMIN_VISIBLE_USER_ID = (process.env.ADMIN_VISIBLE_USER_ID || "example_adm
 if (!API_KEY) console.warn("[WARN] API_KEY is not set.");
 if (!DATA_ENCRYPTION_KEY) console.warn("[WARN] DATA_ENCRYPTION_KEY is not set; private data cannot be stored.");
 if (TEST_PHONE_AUTH_ENABLED) console.warn("[WARN] Test phone auth is enabled. Do not enable it in production.");
+
+// ── Encryption and identity helpers ───────────────────────
 
 function parseEncryptionKey(value) {
   const raw = String(value || "").trim();
@@ -119,7 +123,7 @@ function resolveProfileUserId(profile = {}) {
   return "";
 }
 
-// ── MongoDB 스키마 ────────────────────────────────────────
+// ── MongoDB models ────────────────────────────────────────
 
 // 공지사항
 const noticeSchema = new mongoose.Schema({
@@ -157,7 +161,7 @@ const pendingTokenSchema = new mongoose.Schema({
 pendingTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 const PendingToken = mongoose.model("PendingToken", pendingTokenSchema);
 
-// ── MongoDB 연결 ──────────────────────────────────────────
+// ── MongoDB lifecycle ─────────────────────────────────────
 let dbConnected = false;
 let dbConnecting = false;
 
@@ -269,7 +273,7 @@ mongoose.connection.on("connected", () => {
   dbConnected = true;
 });
 
-// ── 공지사항 헬퍼 ─────────────────────────────────────────
+// ── Notice helpers ────────────────────────────────────────
 async function readNotices() {
   if (!dbConnected) return [];
   try {
@@ -281,7 +285,7 @@ async function readNotices() {
   }
 }
 
-// ── Express 앱 ────────────────────────────────────────────
+// ── Express app and middleware ────────────────────────────
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
@@ -406,6 +410,8 @@ app.use((req, res, next) => {
   return next();
 });
 
+// ── External API and Firebase helpers ─────────────────────
+
 function sanitizeNoticeText(value) {
   return String(value || "").replace(/\r\n/g, "\n").trim().slice(0, NOTICE_MAX_LENGTH);
 }
@@ -467,6 +473,8 @@ async function verifyFirebaseAuth(idToken) {
     displayName
   };
 }
+
+// ── User profile and registration helpers ─────────────────
 
 function decryptPendingUserData(pending) {
   if (pending?.encryptedUserData) return decryptJson(pending.encryptedUserData);
@@ -711,6 +719,8 @@ async function buildRegistrationProfile(body = {}) {
   };
 }
 
+// ── NEIS data helpers ─────────────────────────────────────
+
 function parseNeisResult(payload) {
   if (!payload || typeof payload !== "object") return null;
   if (payload.RESULT && typeof payload.RESULT.CODE === "string") return payload.RESULT;
@@ -754,7 +764,7 @@ function formatDateToYmd(date) {
   return `${y}${m}${d}`;
 }
 
-// ── 회원가입 라우트 ───────────────────────────────────────
+// ── Static pages and client configuration APIs ────────────
 
 // 회원가입 페이지
 app.get("/register", (req, res) => {
@@ -797,6 +807,8 @@ app.get("/api/app-config", (req, res) => {
     adminVisibleUserId: ADMIN_VISIBLE_USER_ID
   });
 });
+
+// ── Login and account APIs ────────────────────────────────
 
 app.post("/api/login", async (req, res) => {
   try {
@@ -954,6 +966,8 @@ app.post("/api/account/token", async (req, res) => {
   }
 });
 
+// ── Registration and Discord token APIs ───────────────────
+
 // 회원가입 처리 → 임시 토큰 발급
 app.post("/api/register", async (req, res) => {
   try {
@@ -1052,7 +1066,7 @@ app.get("/api/user/:discordId", async (req, res) => {
   }
 });
 
-// ── 기존 라우트 ───────────────────────────────────────────
+// ── Health, notice, and admin APIs ────────────────────────
 app.get("/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString(), db: dbConnected });
 });
@@ -1145,6 +1159,8 @@ app.delete("/admin/notices/:id", requireAdminAuth, async (req, res) => {
     res.status(500).json({ error: "NOTICE_DELETE_ERROR", message: err.message });
   }
 });
+
+// ── NEIS timetable and meal APIs ──────────────────────────
 
 app.get("/api/searchSchool", async (req, res) => {
   if (!requireApiKey(res)) return;
@@ -1271,7 +1287,7 @@ app.get("/api/monthlyMeal", async (req, res) => {
   }
 });
 
-// ── 서버 시작 ─────────────────────────────────────────────
+// ── Startup ───────────────────────────────────────────────
 function startHttpServer() {
   app.listen(PORT, () => {
     console.log(`Server running on ${PORT}`);

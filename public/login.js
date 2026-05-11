@@ -13,6 +13,8 @@ if (REDIRECTING_TO_LOCALHOST) {
   window.location.replace(url.toString());
 }
 
+// ── Login state and navigation helpers ────────────────────
+
 function setLoginStatus(text, isReady = false) {
   const el = document.getElementById("loginStatus");
   if (!el) return;
@@ -153,6 +155,8 @@ async function loginWithPassword() {
 
 window.loginWithPassword = loginWithPassword;
 
+// ── Password field UI ─────────────────────────────────────
+
 function initPasswordToggles() {
   document.querySelectorAll("[data-password-toggle]").forEach(button => {
     const targetId = button.dataset.passwordToggle;
@@ -229,6 +233,8 @@ async function initFirebaseAuth() {
     setLoginStatus(`Firebase 설정이 필요합니다: ${e.message}`);
   }
 }
+
+// ── Firebase SMS and Google login ─────────────────────────
 
 async function resetRecaptcha() {
   if (!recaptchaVerifier) return;
@@ -328,6 +334,8 @@ async function confirmPhoneCode() {
     setLoginStatus(`인증번호 확인에 실패했습니다: ${e.message}`);
   }
 }
+
+// ── Page initialization ───────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
   updateRegisterLinks();

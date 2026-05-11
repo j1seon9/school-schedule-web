@@ -27,6 +27,8 @@ if (REDIRECTING_TO_LOCALHOST) {
 
 const registerReadNonce = getRegisterReadNonce();
 
+// ── Legal document read state ─────────────────────────────
+
 function getRegisterReadNonce() {
   try {
     const urlNonce = new URLSearchParams(window.location.search).get("readNonce");
@@ -110,6 +112,8 @@ function updateLegalLinks() {
     }
   });
 }
+
+// ── Legal modal ───────────────────────────────────────────
 
 function markLegalRead(type) {
   const now = Date.now();
@@ -204,6 +208,8 @@ function initLegalModal() {
     if (event.key === "Escape" && modal?.getAttribute("aria-hidden") === "false") closeLegalModal();
   });
 }
+
+// ── Register draft restore ────────────────────────────────
 
 function clearResumeQuery() {
   try {
@@ -302,6 +308,8 @@ function restoreRegisterDraft() {
   }
 }
 
+// ── Step gates and auth state ─────────────────────────────
+
 function updatePrivacyGate() {
   const isPrivacyRead = hasReadPrivacy();
   const isTermsRead = hasReadTerms();
@@ -379,6 +387,8 @@ function normalizePhoneNumber(value) {
   if (digits.startsWith("8210")) return `+${digits}`;
   return raw;
 }
+
+// ── Firebase SMS and Google auth ──────────────────────────
 
 async function initFirebaseAuth() {
   if (REDIRECTING_TO_LOCALHOST) return;
@@ -561,6 +571,8 @@ async function confirmPhoneCode() {
   }
 }
 
+// ── School search and account credentials ─────────────────
+
 async function searchSchool() {
   const name = document.getElementById("schoolInput").value.trim();
   if (!name) return showMsg("step1Msg", "학교 이름을 입력하세요.", "error");
@@ -694,6 +706,8 @@ function validateRegistrationBasics(messageId, options = {}) {
 }
 
 function goStep1() { showStep("step1"); }
+
+// ── Registration submit and token display ─────────────────
 
 function showStep(id, shouldSave = true) {
   document.querySelectorAll(".reg-step").forEach(el => el.classList.remove("active"));
@@ -867,12 +881,7 @@ function clearMsg(id) {
   el.className = "reg-msg";
 }
 
-function resetAgreementChecks() {
-  ["agreeCheck", "termsAgreeCheck", "ageCheck"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.checked = false;
-  });
-}
+// ── Page initialization ───────────────────────────────────
 
 function initPasswordToggles() {
   document.querySelectorAll("[data-password-toggle]").forEach(button => {
