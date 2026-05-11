@@ -2,6 +2,7 @@
   "name": "school-schedule-app",
   "version": "2.1",
   "description": "케토",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "start": "node server.js",

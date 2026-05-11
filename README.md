@@ -190,3 +190,11 @@ PHONE_AUTH_TEST_PHONE=+821012345678
 ```
 
 이 기능은 `NODE_ENV=production`에서는 동작하지 않도록 막혀 있습니다. 실제 배포에서는 반드시 `ENABLE_TEST_PHONE_AUTH=false`로 두고 Firebase Phone Auth ID token만 사용하세요.
+
+## 라이선스
+
+Copyright (c) 2026.
+
+All rights reserved.
+
+본 프로젝트의 소스 코드, 문서, 디자인 및 기타 구성 요소의 무단 복제, 수정, 배포, 상업적 이용을 허용하지 않습니다. Firebase, MongoDB, NEIS Open API, Discord 등 외부 서비스는 각 서비스의 약관과 정책을 따릅니다.
