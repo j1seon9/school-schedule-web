@@ -12,8 +12,10 @@
     <div class="">
     <div class="reg-logo">
       <h1>🏫 케토 서비스</h1>
-      <p>회원가입</p>
+      <p id="registerModeSubtitle">회원가입</p>
       <a class="login-register-link" href="/login">이미 회원이라면 로그인</a>
+      <a class="login-register-link" id="authRegisterLink" href="/register/auth">SMS/Google 회원가입</a>
+      <a class="login-register-link" id="idRegisterLink" href="/register" hidden>ID/비밀번호 회원가입</a>
     </div>
 
     <div class="reg-card">
@@ -25,7 +27,7 @@
         <label class="reg-label">학교 이름</label>
         <div class="reg-search-row">
           <input id="schoolInput" type="text" class="reg-input" placeholder="학교 이름을 입력하세요">
-          <button class="reg-btn reg-btn-outline" id="searchBtn" type="button">검색</button>
+          <button class="reg-btn reg-btn-outline" id="searchBtn" type="button" onclick="searchSchool()">검색</button>
         </div>
 
         <ul class="reg-school-list" id="schoolList" style="display:none"></ul>
@@ -46,17 +48,19 @@
         <input id="userId" type="text" class="reg-input" placeholder="예: example_ID" maxlength="24" autocomplete="username">
         <div class="muted">영문 소문자, 숫자, _, - 조합의 3~24자로 입력하세요.</div>
 
-        <label class="reg-label" for="password">비밀번호</label>
-        <div class="password-field">
-          <input id="password" type="password" class="reg-input" placeholder="영문과 숫자 포함 8자 이상" maxlength="72" autocomplete="new-password">
-          <button class="password-toggle" type="button" data-password-toggle="password" aria-controls="password" aria-pressed="false">표시</button>
+        <div id="passwordRegisterFields">
+          <label class="reg-label" for="password">비밀번호</label>
+          <div class="password-field">
+            <input id="password" type="password" class="reg-input" placeholder="영문과 숫자 포함 8자 이상" maxlength="72" autocomplete="new-password">
+            <button class="password-toggle" type="button" data-password-toggle="password" aria-controls="password" aria-pressed="false">표시</button>
+          </div>
+          <label class="reg-label" for="passwordConfirm">비밀번호 확인</label>
+          <div class="password-field">
+            <input id="passwordConfirm" type="password" class="reg-input" placeholder="비밀번호 다시 입력" maxlength="72" autocomplete="new-password">
+            <button class="password-toggle" type="button" data-password-toggle="passwordConfirm" aria-controls="passwordConfirm" aria-pressed="false">표시</button>
+          </div>
+          <div class="muted">Google/SMS 없이도 로그인할 수 있도록 ID/비밀번호 계정이 함께 생성됩니다.</div>
         </div>
-        <label class="reg-label" for="passwordConfirm">비밀번호 확인</label>
-        <div class="password-field">
-          <input id="passwordConfirm" type="password" class="reg-input" placeholder="비밀번호 다시 입력" maxlength="72" autocomplete="new-password">
-          <button class="password-toggle" type="button" data-password-toggle="passwordConfirm" aria-controls="passwordConfirm" aria-pressed="false">표시</button>
-        </div>
-        <div class="muted">Google/SMS 없이도 로그인할 수 있도록 ID/비밀번호 계정이 함께 생성됩니다.</div>
 
         <div class="reg-msg" id="step1Msg"></div>
         <button class="reg-btn reg-btn-main" onclick="goStep2()">다음</button>
@@ -96,7 +100,7 @@
 
         <div class="reg-privacy-status" id="termsStatus"></div>
 
-        <div class="reg-phone-box">
+        <div class="reg-phone-box" id="firebaseRegisterFields">
           <label class="reg-label">인증 방법</label>
           <button class="reg-btn reg-btn-outline reg-google-btn" id="googleAuthBtn" type="button" onclick="signInWithGoogle()" disabled>Google로 인증하기</button>
           <div class="reg-auth-divider">또는 SMS 인증</div>

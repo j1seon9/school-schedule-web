@@ -5,7 +5,8 @@ const loadingEl = qs("loading");
 const favoriteListEl = qs("favoriteList");
 const favoriteSaveBtnEl = qs("favoriteSaveBtn");
 const favoriteEmptyEl = qs("favoriteEmpty");
-const searchBtnEl = qs("searchBtn");
+const classSearchBtnEl = qs("classSearchBtn");
+const dateSearchBtnEl = qs("dateSearchBtn");
 let ownerUserId = "example_admin";
 const LOGIN_USER_KEY = "schoolBotLoginUser";
 const REGISTER_DRAFT_KEY = "schoolBotRegisterDraft";
@@ -318,13 +319,24 @@ function loadFavoriteSchool() {
 
 const SEARCH_STATE_KEY = "search.state.v1";
 
+function getDefaultDateState() {
+  const kstNow = nowKst();
+  return {
+    dateBase: toYmd(kstNow),
+    weekStartDate: getMondayDateValue(kstNow),
+    mealMonthDate: getMonthFirstValue(kstNow)
+  };
+}
+
 function buildSearchState() {
+  const defaults = getDefaultDateState();
   return {
     schoolName: String(qs("schoolName")?.value || "").trim(),
     grade: String(qs("grade")?.value || "").trim(),
     classNo: String(qs("classNo")?.value || "").trim(),
-    weekStartDate: String(qs("weekStartDate")?.value || "").trim(),
-    mealMonthDate: String(qs("mealMonthDate")?.value || "").trim()
+    weekStartDate: String(qs("weekStartDate")?.value || defaults.weekStartDate).trim(),
+    mealMonthDate: String(qs("mealMonthDate")?.value || defaults.mealMonthDate).trim(),
+    dateBase: defaults.dateBase
   };
 }
 
@@ -339,11 +351,18 @@ function persistSearchState() {
 
 function applySearchState() {
   const raw = localStorage.getItem(SEARCH_STATE_KEY);
-  if (!raw) return;
+  const defaults = getDefaultDateState();
+  if (!raw) {
+    setDefaultDates(defaults);
+    return;
+  }
 
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return;
+    if (!parsed || typeof parsed !== "object") {
+      setDefaultDates(defaults);
+      return;
+    }
 
     const schoolNameEl = qs("schoolName");
     const gradeEl = qs("grade");
@@ -354,10 +373,16 @@ function applySearchState() {
     if (schoolNameEl && parsed.schoolName) schoolNameEl.value = String(parsed.schoolName);
     if (gradeEl && parsed.grade) gradeEl.value = String(parsed.grade);
     if (classNoEl && parsed.classNo) classNoEl.value = String(parsed.classNo);
-    if (weekStartDateEl && parsed.weekStartDate) weekStartDateEl.value = String(parsed.weekStartDate);
-    if (mealMonthDateEl && parsed.mealMonthDate) mealMonthDateEl.value = String(parsed.mealMonthDate);
+    if (parsed.dateBase === defaults.dateBase) {
+      if (weekStartDateEl && parsed.weekStartDate) weekStartDateEl.value = String(parsed.weekStartDate);
+      if (mealMonthDateEl && parsed.mealMonthDate) mealMonthDateEl.value = String(parsed.mealMonthDate);
+    } else {
+      setDefaultDates(defaults);
+      persistSearchState();
+    }
   } catch {
     localStorage.removeItem(SEARCH_STATE_KEY);
+    setDefaultDates(defaults);
   }
 }
 
@@ -387,6 +412,20 @@ function bindSearchStateEvents() {
 
 const FAVORITE_KEY = "favorite.list.v1";
 const FAVORITE_LIMIT = 3;
+
+function getFavoriteStorageKey() {
+  const userId = String(readLoggedInUser()?.userId || "").trim();
+  return userId ? `${FAVORITE_KEY}:${userId}` : FAVORITE_KEY;
+}
+
+function getAuthToken() {
+  return String(readLoggedInUser()?.authToken || "").trim();
+}
+
+function favoriteAuthHeaders() {
+  const authToken = getAuthToken();
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
 
 function getSavedSchool() {
   const raw = localStorage.getItem("favoriteSchool");
@@ -458,7 +497,7 @@ function normalizeFavorite(item) {
 }
 
 function readFavorites() {
-  const raw = localStorage.getItem(FAVORITE_KEY);
+  const raw = localStorage.getItem(getFavoriteStorageKey());
   if (!raw) return [];
 
   try {
@@ -474,7 +513,44 @@ function readFavorites() {
 }
 
 function writeFavorites(list) {
-  localStorage.setItem(FAVORITE_KEY, JSON.stringify(list.slice(0, FAVORITE_LIMIT)));
+  const favorites = list.slice(0, FAVORITE_LIMIT);
+  localStorage.setItem(getFavoriteStorageKey(), JSON.stringify(favorites));
+  saveFavoritesToServer(favorites);
+}
+
+async function loadFavoritesFromServer() {
+  const authToken = getAuthToken();
+  if (!authToken) return;
+
+  try {
+    const response = await fetch("/api/account/favorites", {
+      headers: favoriteAuthHeaders(),
+      cache: "no-store"
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !Array.isArray(data.favorites)) return;
+    localStorage.setItem(getFavoriteStorageKey(), JSON.stringify(data.favorites));
+  } catch {
+    // Local favorites remain available when the server is temporarily unreachable.
+  }
+}
+
+async function saveFavoritesToServer(favorites) {
+  const authToken = getAuthToken();
+  if (!authToken) return;
+
+  try {
+    await fetch("/api/account/favorites", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...favoriteAuthHeaders()
+      },
+      body: JSON.stringify({ favorites })
+    });
+  } catch {
+    // The local copy is already saved; the next successful login can resync.
+  }
 }
 
 function renderFavorites() {
@@ -570,9 +646,10 @@ function applyFavorite(fav) {
 }
 
 function updateSearchButtonState() {
-  if (!searchBtnEl) return;
-  const { grade } = getSelectedClassInfo();
-  searchBtnEl.disabled = !grade;
+  const { schoolCode, officeCode, grade, classNo } = getSelectedClassInfo();
+  const canSearch = Boolean(schoolCode && officeCode && grade && classNo);
+  if (classSearchBtnEl) classSearchBtnEl.disabled = !canSearch;
+  if (dateSearchBtnEl) dateSearchBtnEl.disabled = !canSearch;
 }
 
 function handleSearchClick() {
@@ -877,17 +954,15 @@ async function autoQuery() {
   await Promise.all([loadToday(), loadWeekly(), loadMonthlyMeal()]);
 }
 
-function setDefaultDates() {
-  const kstNow = nowKst();
-
+function setDefaultDates(defaults = getDefaultDateState()) {
   const weekStartDateEl = qs("weekStartDate");
-  if (weekStartDateEl && !weekStartDateEl.value) {
-    weekStartDateEl.value = getMondayDateValue(kstNow);
+  if (weekStartDateEl) {
+    weekStartDateEl.value = defaults.weekStartDate;
   }
 
   const mealMonthDateEl = qs("mealMonthDate");
-  if (mealMonthDateEl && !mealMonthDateEl.value) {
-    mealMonthDateEl.value = getMonthFirstValue(kstNow);
+  if (mealMonthDateEl) {
+    mealMonthDateEl.value = defaults.mealMonthDate;
   }
 }
 
@@ -924,11 +999,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindSearchStateEvents();
   applySearchState();
   loadFavoriteSchool();
+  await loadFavoritesFromServer();
   renderFavorites();
-  setDefaultDates();
   updateSearchButtonState();
   favoriteSaveBtnEl?.addEventListener("click", saveCurrentFavorite);
-  searchBtnEl?.addEventListener("click", handleSearchClick);
+  classSearchBtnEl?.addEventListener("click", handleSearchClick);
+  dateSearchBtnEl?.addEventListener("click", handleSearchClick);
   await loadNotices();
   setInterval(loadNotices, 60_000);
   if (hasSelectedSchool()) {

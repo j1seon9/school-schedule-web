@@ -31,6 +31,19 @@ function readLoggedInUser() {
   }
 }
 
+function writeLoggedInUser(user) {
+  try {
+    localStorage.setItem(LOGIN_USER_KEY, JSON.stringify(user));
+  } catch {
+    // Account state is restored on the next successful login if storage fails.
+  }
+}
+
+function getAuthToken() {
+  const user = readLoggedInUser();
+  return String(user?.authToken || "").trim();
+}
+
 function clearStoredUser() {
   localStorage.removeItem(LOGIN_USER_KEY);
   localStorage.removeItem("favoriteSchool");
@@ -99,9 +112,13 @@ async function initFirebaseAuth() {
 
   firebaseReadyPromise = (async () => {
     const deleteBtn = qs("deleteAccountBtn");
+    const linkGoogleBtn = qs("linkGoogleBtn");
+    const resetEmailBtn = qs("sendResetEmailBtn");
 
     if (!window.firebase) {
       if (deleteBtn) deleteBtn.disabled = true;
+      if (linkGoogleBtn) linkGoogleBtn.disabled = true;
+      if (resetEmailBtn) resetEmailBtn.disabled = true;
       setStatus("Firebase SDK를 불러오지 못했습니다. 네트워크를 확인해 주세요.", false, true);
       return null;
     }
@@ -124,9 +141,13 @@ async function initFirebaseAuth() {
       firebaseAuth.languageCode = "ko";
       await waitForAuthState(firebaseAuth);
       if (deleteBtn) deleteBtn.disabled = false;
+      if (linkGoogleBtn) linkGoogleBtn.disabled = false;
+      if (resetEmailBtn) resetEmailBtn.disabled = false;
       return firebaseAuth;
     } catch (e) {
       if (deleteBtn) deleteBtn.disabled = true;
+      if (linkGoogleBtn) linkGoogleBtn.disabled = true;
+      if (resetEmailBtn) resetEmailBtn.disabled = true;
       setStatus(`Firebase 인증 설정을 확인해 주세요: ${e.message}`, false, true);
       return null;
     }
@@ -153,6 +174,93 @@ async function logout() {
     // Local logout should still finish even if Firebase is temporarily unavailable.
   }
   window.location.href = "/";
+}
+
+async function linkGoogleAccount() {
+  const btn = qs("linkGoogleBtn");
+  const authToken = getAuthToken();
+  if (!authToken) {
+    setStatus("로그인 세션이 없습니다. 다시 로그인해 주세요.", false, true);
+    return;
+  }
+
+  const auth = await initFirebaseAuth();
+  if (!auth) return;
+
+  if (btn) btn.disabled = true;
+  setStatus("Google 계정 연동을 진행하는 중입니다...");
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const result = await auth.signInWithPopup(provider);
+    if (!result?.user) throw new Error("Google 사용자 정보를 확인할 수 없습니다.");
+    const firebaseIdToken = await result.user.getIdToken(true);
+
+    const response = await fetch("/api/account/link-google", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ firebaseIdToken })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || data.error || "Google 계정 연동에 실패했습니다.");
+
+    const current = readLoggedInUser() || {};
+    const nextUser = data.user || {};
+    writeLoggedInUser({
+      ...current,
+      userId: nextUser.userId || current.userId || "",
+      authToken: data.authToken || current.authToken || "",
+      school: {
+        name: nextUser.schoolName || current.school?.name || "",
+        schoolCode: nextUser.schoolCode || current.school?.schoolCode || "",
+        officeCode: nextUser.officeCode || current.school?.officeCode || "",
+        officeName: nextUser.officeName || current.school?.officeName || "",
+        type: nextUser.type || current.school?.type || ""
+      },
+      grade: nextUser.grade || current.grade || "",
+      classNo: nextUser.classNo || current.classNo || "",
+      loggedInAt: current.loggedInAt || Date.now()
+    });
+    renderAccount();
+    if (result.user.email && qs("resetEmailInput")) qs("resetEmailInput").value = result.user.email;
+    setStatus("Google 계정 연동이 완료되었습니다. 이제 Google 로그인으로도 같은 계정을 사용할 수 있습니다.", true, false);
+  } catch (e) {
+    setStatus(e.message, false, true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function sendPasswordResetEmail() {
+  const btn = qs("sendResetEmailBtn");
+  const emailInput = qs("resetEmailInput");
+  const email = String(emailInput?.value || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    setStatus("비밀번호 재설정 이메일 주소를 올바르게 입력해 주세요.", false, true);
+    emailInput?.focus();
+    return;
+  }
+
+  const auth = await initFirebaseAuth();
+  if (!auth) return;
+
+  if (btn) btn.disabled = true;
+  setStatus("비밀번호 재설정 이메일을 발송하는 중입니다...");
+  try {
+    await auth.sendPasswordResetEmail(email);
+    setStatus("비밀번호 재설정 이메일을 발송했습니다. 메일함을 확인해 주세요.", true, false);
+  } catch (e) {
+    if (e.code === "auth/user-not-found") {
+      setStatus("Firebase에 등록된 이메일 계정이 없습니다. Google 연동 계정이거나 로컬 ID/비밀번호 계정이면 재설정 메일을 보낼 수 없습니다.", false, true);
+      return;
+    }
+    setStatus(`비밀번호 재설정 이메일 발송에 실패했습니다: ${e.message}`, false, true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function initPasswordToggles() {
@@ -362,6 +470,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initPasswordToggles();
   initFirebaseAuth();
   qs("logoutBtn")?.addEventListener("click", logout);
+  qs("linkGoogleBtn")?.addEventListener("click", linkGoogleAccount);
+  qs("sendResetEmailBtn")?.addEventListener("click", sendPasswordResetEmail);
   qs("deleteAccountBtn")?.addEventListener("click", deleteAccount);
   qs("reissueTokenBtn")?.addEventListener("click", reissueDiscordToken);
   qs("accountTokenCopyBtn")?.addEventListener("click", copyAccountToken);

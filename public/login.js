@@ -6,6 +6,11 @@ let phoneConfirmationResult = null;
 let firebaseClientConfig = null;
 const REDIRECTING_TO_LOCALHOST = window.location.hostname === "127.0.0.1";
 const REGISTER_DRAFT_KEY = "schoolBotRegisterDraft";
+const ADMIN_STORAGE_KEY = "admin.credentials.v1";
+
+if (window.location.protocol === "file:") {
+  window.location.replace("http://localhost:8000/login");
+}
 
 if (REDIRECTING_TO_LOCALHOST) {
   const url = new URL(window.location.href);
@@ -20,6 +25,13 @@ function setLoginStatus(text, isReady = false) {
   if (!el) return;
   el.textContent = text;
   el.classList.toggle("is-ready", isReady);
+}
+
+function getPhoneAuthErrorMessage(error) {
+  if (error?.code === "auth/billing-not-enabled") {
+    return "Firebase 결제 설정이 꺼져 있어 실제 SMS를 보낼 수 없습니다. Firebase Console에서 Blaze 결제를 활성화하거나 Authentication > Phone numbers for testing에 등록한 테스트 번호/인증번호를 사용해 주세요. Google 인증은 계속 사용할 수 있습니다.";
+  }
+  return `인증 문자 발송에 실패했습니다: ${error?.message || "알 수 없는 오류"}`;
 }
 
 function normalizePhoneNumber(value) {
@@ -59,7 +71,7 @@ function goRegister() {
   window.location.href = getRegisterUrl();
 }
 
-function persistLoggedInUser(user) {
+function persistLoggedInUser(user, authToken = "") {
   const school = {
     name: user.schoolName || "",
     schoolCode: user.schoolCode || "",
@@ -80,11 +92,39 @@ function persistLoggedInUser(user) {
   localStorage.setItem("search.state.v1", JSON.stringify(searchState));
   localStorage.setItem("schoolBotLoginUser", JSON.stringify({
     userId: user.userId || "",
+    authToken,
     school,
     grade: user.grade || "",
     classNo: user.classNo || "",
     loggedInAt: Date.now()
   }));
+  if (Array.isArray(user.favorites)) {
+    localStorage.setItem(`favorite.list.v1:${user.userId || ""}`, JSON.stringify(user.favorites));
+  }
+}
+
+function saveAdminCredentials(creds) {
+  sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(creds));
+}
+
+function buildAdminAuthHeaders(creds) {
+  const headers = {
+    "x-admin-id": creds.id,
+    "x-admin-password": creds.password
+  };
+  if (creds.key) headers["x-admin-key"] = creds.key;
+  return headers;
+}
+
+async function tryAdminLogin(userId, password) {
+  const creds = { id: userId, password, key: "" };
+  const response = await fetch("/admin/monitor", {
+    headers: buildAdminAuthHeaders(creds)
+  });
+  if (response.status === 401) return false;
+  if (!response.ok) throw new Error("ADMIN_AUTH_REQUEST_FAILED");
+  saveAdminCredentials(creds);
+  return true;
 }
 
 async function finishLogin(idToken) {
@@ -108,7 +148,7 @@ async function finishLogin(idToken) {
     return;
   }
 
-  persistLoggedInUser(data.user);
+  persistLoggedInUser(data.user, data.authToken);
   setLoginStatus("로그인이 완료되었습니다. 메인 페이지로 이동합니다.", true);
   window.location.href = "/";
 }
@@ -127,6 +167,14 @@ async function loginWithPassword() {
   loginBtn.disabled = true;
   setLoginStatus("회원정보를 확인하는 중입니다...");
   try {
+    const isAdmin = await tryAdminLogin(userId, password);
+    if (isAdmin) {
+      localStorage.removeItem("schoolBotLoginUser");
+      setLoginStatus("관리자 로그인 페이지로 이동합니다.", true);
+      window.location.href = "/admin/login.html";
+      return;
+    }
+
     const response = await fetch("/api/login/password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -143,7 +191,7 @@ async function loginWithPassword() {
       return;
     }
 
-    persistLoggedInUser(data.user);
+    persistLoggedInUser(data.user, data.authToken);
     setLoginStatus("로그인이 완료되었습니다. 메인 페이지로 이동합니다.", true);
     window.location.href = "/";
   } catch {
@@ -309,7 +357,7 @@ async function sendPhoneCode() {
     }
   } catch (e) {
     await resetRecaptcha();
-    setLoginStatus(`인증 문자 발송에 실패했습니다: ${e.message}`);
+    setLoginStatus(getPhoneAuthErrorMessage(e));
   } finally {
     sendBtn.disabled = false;
   }

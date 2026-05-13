@@ -10,14 +10,20 @@ let firebaseIdToken = "";
 let firebaseAuthMethod = "";
 let firebaseClientConfig = null;
 let activeLegalModalType = "";
+const REGISTER_AUTH_PATHS = new Set(["/register/auth", "/register/firebase"]);
+const IS_FIREBASE_REGISTER_PAGE = REGISTER_AUTH_PATHS.has(window.location.pathname.toLowerCase());
 const PRIVACY_READ_KEY = "schoolBotPrivacyReadAt";
 const TERMS_READ_KEY = "schoolBotTermsReadAt";
 const PRIVACY_READ_NONCE_KEY = "schoolBotPrivacyReadNonce";
 const TERMS_READ_NONCE_KEY = "schoolBotTermsReadNonce";
 const REGISTER_READ_NONCE_KEY = "schoolBotRegisterReadNonce";
-const REGISTER_DRAFT_KEY = "schoolBotRegisterDraft";
+const REGISTER_DRAFT_KEY = IS_FIREBASE_REGISTER_PAGE ? "schoolBotRegisterAuthDraft" : "schoolBotRegisterDraft";
 const PRIVACY_READ_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const REDIRECTING_TO_LOCALHOST = window.location.hostname === "127.0.0.1";
+
+if (window.location.protocol === "file:") {
+  window.location.replace("http://localhost:8000/register");
+}
 
 if (REDIRECTING_TO_LOCALHOST) {
   const url = new URL(window.location.href);
@@ -26,6 +32,14 @@ if (REDIRECTING_TO_LOCALHOST) {
 }
 
 const registerReadNonce = getRegisterReadNonce();
+
+function isFirebaseRegisterMode() {
+  return IS_FIREBASE_REGISTER_PAGE;
+}
+
+function isPasswordRegisterMode() {
+  return !isFirebaseRegisterMode();
+}
 
 // ── Legal document read state ─────────────────────────────
 
@@ -217,7 +231,7 @@ function clearResumeQuery() {
     if (!url.searchParams.has("resume")) return;
     url.searchParams.delete("resume");
     const next = `${url.pathname}${url.search}${url.hash}`;
-    window.history.replaceState(null, "", next || "/register");
+    window.history.replaceState(null, "", next || window.location.pathname || "/register");
   } catch {
     // Query cleanup is cosmetic; draft restore should continue even if it fails.
   }
@@ -345,11 +359,12 @@ function updatePrivacyGate() {
 }
 
 function updateSubmitGate() {
+  const authReady = isFirebaseRegisterMode() ? Boolean(firebaseIdToken) : isPasswordAuthReady();
   const canSubmit =
     isRegistrationBasicsReady() &&
     hasReadPrivacy() &&
     hasReadTerms() &&
-    (Boolean(firebaseIdToken) || isPasswordAuthReady());
+    authReady;
   const submitBtn = document.getElementById("submitBtn");
   const tokenSubmitBtn = document.getElementById("tokenSubmitBtn");
   if (submitBtn) submitBtn.disabled = !canSubmit;
@@ -361,6 +376,13 @@ function setPhoneStatus(text, isReady = false) {
   if (!el) return;
   el.textContent = text;
   el.classList.toggle("is-ready", isReady);
+}
+
+function getPhoneAuthErrorMessage(error) {
+  if (error?.code === "auth/billing-not-enabled") {
+    return "Firebase 결제 설정이 꺼져 있어 실제 SMS를 보낼 수 없습니다. Firebase Console에서 Blaze 결제를 활성화하거나 Authentication > Phone numbers for testing에 등록한 테스트 번호/인증번호를 사용해 주세요. Google 인증은 계속 사용할 수 있습니다.";
+  }
+  return `인증 문자 발송에 실패했습니다: ${error?.message || "알 수 없는 오류"}`;
 }
 
 function setFirebaseAuthToken(idToken, method, statusText) {
@@ -736,7 +758,7 @@ function setStep3Mode(mode) {
   tokenNotice.hidden = true;
 }
 
-function persistRegisteredUser(user) {
+function persistRegisteredUser(user, authToken = "") {
   const school = {
     name: user.schoolName || "",
     schoolCode: user.schoolCode || "",
@@ -754,11 +776,15 @@ function persistRegisteredUser(user) {
   }));
   localStorage.setItem("schoolBotLoginUser", JSON.stringify({
     userId: user.userId || "",
+    authToken,
     school,
     grade: user.grade || "",
     classNo: user.classNo || "",
     loggedInAt: Date.now()
   }));
+  if (Array.isArray(user.favorites)) {
+    localStorage.setItem(`favorite.list.v1:${user.userId || ""}`, JSON.stringify(user.favorites));
+  }
 }
 
 async function submitRegister(mode = "web") {
@@ -829,7 +855,7 @@ async function submitRegister(mode = "web") {
       startTimer(5 * 60);
     } else {
       tokenValue = "";
-      persistRegisteredUser(data.user || {});
+      persistRegisteredUser(data.user || {}, data.authToken);
     }
     clearRegisterDraft();
     showStep("step3", false);

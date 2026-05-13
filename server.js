@@ -24,7 +24,7 @@ const ADMIN_ID       = (process.env.ADMIN_ID       || "admin").trim();
 const ADMIN_PASSWORD =  process.env.ADMIN_PASSWORD || "admin1234";
 const hasAdminAuthKeyConfig = typeof process.env.ADMIN_AUTH_KEY === "string";
 const ADMIN_AUTH_KEY = hasAdminAuthKeyConfig ? process.env.ADMIN_AUTH_KEY.trim() : "change-this-admin-key";
-const ADMIN_AUTH_KEY_REQUIRED = ADMIN_AUTH_KEY.length > 0;
+const ADMIN_AUTH_KEY_REQUIRED = hasAdminAuthKeyConfig && ADMIN_AUTH_KEY.length > 0;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -34,7 +34,9 @@ const WINDOW_MS           = 60_000;
 const DDOS_ALERT_THRESHOLD = Math.ceil(RATE_LIMIT * 0.8);
 const NOTICE_MAX_LENGTH   = 300;
 const NOTICE_MAX_ITEMS    = 100;
+const FAVORITE_LIMIT      = 3;
 const TOKEN_TTL_MS        = 5 * 60 * 1000; // 5분
+const SESSION_TTL_MS      = 30 * 24 * 60 * 60 * 1000;
 const PRIVACY_READ_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const FIREBASE_WEB_API_KEY = (process.env.FIREBASE_WEB_API_KEY || "").trim();
 const FIREBASE_AUTH_DOMAIN = (process.env.FIREBASE_AUTH_DOMAIN || "").trim();
@@ -355,6 +357,40 @@ function verifyPasswordAuth(password, passwordAuth = {}) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
+function signSessionPayload(body) {
+  const key = requireEncryptionKey();
+  return createHmac("sha256", key).update(`session:${body}`).digest("base64url");
+}
+
+function createSessionToken(userId) {
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedUserId) throw httpError(400, "USER_ID_REQUIRED", "회원 ID가 필요합니다.");
+  const body = Buffer.from(JSON.stringify({
+    userId: normalizedUserId,
+    exp: Date.now() + SESSION_TTL_MS
+  }), "utf8").toString("base64url");
+  return `${body}.${signSessionPayload(body)}`;
+}
+
+function verifySessionToken(token) {
+  const [body, signature] = String(token || "").split(".");
+  if (!body || !signature || !safeEqualText(signature, signSessionPayload(body))) {
+    throw httpError(401, "SESSION_INVALID", "로그인 세션이 유효하지 않습니다.");
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+  } catch {
+    throw httpError(401, "SESSION_INVALID", "로그인 세션이 유효하지 않습니다.");
+  }
+  const userId = normalizeUserId(payload?.userId);
+  if (!userId || Number(payload?.exp) < Date.now()) {
+    throw httpError(401, "SESSION_EXPIRED", "로그인 세션이 만료되었습니다.");
+  }
+  return userId;
+}
+
 function requireAdminAuth(req, res, next) {
   const id       = String(req.get("x-admin-id")       || "").trim();
   const password = String(req.get("x-admin-password") || "");
@@ -491,8 +527,37 @@ function pickUserResponse(profile) {
     officeName: profile.officeName || "",
     type:       profile.type || "",
     grade:      profile.grade,
-    classNo:    profile.classNo
+    classNo:    profile.classNo,
+    favorites:  normalizeFavorites(profile.favorites)
   };
+}
+
+function normalizeFavorites(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map(item => {
+      const school = item?.school || {};
+      const schoolCode = String(school.schoolCode || "").trim();
+      const officeCode = String(school.officeCode || "").trim();
+      const grade = String(item?.grade || "").trim();
+      const classNo = String(item?.classNo || "").trim();
+      if (!schoolCode || !officeCode || !grade || !classNo) return null;
+      return {
+        id: String(item.id || `${schoolCode}|${officeCode}|${grade}|${classNo}`),
+        school: {
+          name: String(school.name || "").trim(),
+          schoolCode,
+          officeCode,
+          officeName: String(school.officeName || "").trim(),
+          type: String(school.type || "").trim()
+        },
+        grade,
+        classNo,
+        createdAt: Number(item.createdAt || Date.now())
+      };
+    })
+    .filter(Boolean)
+    .slice(0, FAVORITE_LIMIT);
 }
 
 function buildEncryptedUserUpdate(profile, discordId, guildId) {
@@ -719,6 +784,22 @@ async function buildRegistrationProfile(body = {}) {
   };
 }
 
+function getBearerToken(req) {
+  const header = String(req.get("authorization") || "");
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  return match ? match[1].trim() : "";
+}
+
+async function getSessionUser(req) {
+  const userId = verifySessionToken(getBearerToken(req));
+  const user = await User.findOne({ userIdHash: hashLookup("userId", userId) });
+  if (!user?.encryptedProfile) throw httpError(404, "USER_NOT_FOUND", "회원정보가 없습니다.");
+  const profile = decryptJson(user.encryptedProfile);
+  const storedUserId = resolveProfileUserId(profile);
+  if (storedUserId !== userId) throw httpError(403, "SESSION_USER_MISMATCH", "로그인 세션과 회원정보가 일치하지 않습니다.");
+  return { user, profile, userId };
+}
+
 // ── NEIS data helpers ─────────────────────────────────────
 
 function parseNeisResult(payload) {
@@ -767,7 +848,7 @@ function formatDateToYmd(date) {
 // ── Static pages and client configuration APIs ────────────
 
 // 회원가입 페이지
-app.get("/register", (req, res) => {
+app.get(["/register", "/register/auth", "/register/firebase"], (req, res) => {
   res.sendFile(path.join(__dirname, "public", "Register.html"));
 });
 
@@ -832,7 +913,8 @@ app.post("/api/login", async (req, res) => {
     const profile = decryptJson(user.encryptedProfile);
     res.json({
       ok: true,
-      user: pickUserResponse(profile)
+      user: pickUserResponse(profile),
+      authToken: createSessionToken(resolveProfileUserId(profile))
     });
   } catch (e) {
     res.status(500).json({ error: "LOGIN_ERROR", message: e.message });
@@ -860,7 +942,7 @@ app.post("/api/login/password", async (req, res) => {
       return res.status(401).json({ error: "PASSWORD_INVALID", message: "회원 ID 또는 비밀번호가 올바르지 않습니다." });
     }
 
-    res.json({ ok: true, user: pickUserResponse(profile) });
+    res.json({ ok: true, user: pickUserResponse(profile), authToken: createSessionToken(resolveProfileUserId(profile)) });
   } catch (e) {
     res.status(500).json({ error: "PASSWORD_LOGIN_ERROR", message: e.message });
   }
@@ -966,6 +1048,79 @@ app.post("/api/account/token", async (req, res) => {
   }
 });
 
+app.get("/api/account/favorites", async (req, res) => {
+  try {
+    const { profile } = await getSessionUser(req);
+    res.json({ ok: true, favorites: normalizeFavorites(profile.favorites) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || "FAVORITES_READ_ERROR", message: e.message });
+  }
+});
+
+app.put("/api/account/favorites", async (req, res) => {
+  try {
+    const { user, profile } = await getSessionUser(req);
+    const favorites = normalizeFavorites(req.body?.favorites);
+    const update = buildEncryptedUserUpdate(
+      { ...profile, favorites },
+      profile.discordId || "",
+      profile.guildId || ""
+    );
+    await User.updateOne({ _id: user._id }, { $set: update, $unset: LEGACY_USER_UNSET });
+    res.json({ ok: true, favorites });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || "FAVORITES_SAVE_ERROR", message: e.message });
+  }
+});
+
+app.post("/api/account/link-google", async (req, res) => {
+  try {
+    const { user, profile } = await getSessionUser(req);
+    const { firebaseIdToken } = req.body || {};
+    let firebaseAuth;
+    try {
+      firebaseAuth = await verifyFirebaseAuth(firebaseIdToken);
+    } catch (e) {
+      return res.status(401).json({ error: "FIREBASE_AUTH_REQUIRED", message: e.message });
+    }
+
+    if (!firebaseAuth.firebaseUid) {
+      return res.status(400).json({ error: "FIREBASE_UID_MISSING", message: "Google 인증 정보를 확인할 수 없습니다." });
+    }
+
+    const existingFirebaseUser = await User.findOne({ firebaseUidHash: hashLookup("firebaseUid", firebaseAuth.firebaseUid) });
+    if (existingFirebaseUser && !sameUserDocument(existingFirebaseUser, user)) {
+      return res.status(409).json({ error: "FIREBASE_USER_DUPLICATE", message: "이미 다른 회원정보에 연결된 Google 계정입니다." });
+    }
+
+    const providerIds = Array.from(new Set([
+      ...(Array.isArray(profile.providerIds) ? profile.providerIds : []),
+      ...(Array.isArray(firebaseAuth.providerIds) ? firebaseAuth.providerIds : []),
+      "google.com"
+    ].filter(Boolean)));
+    const linkedProfile = {
+      ...profile,
+      firebaseUid: firebaseAuth.firebaseUid,
+      authProvider: profile.passwordAuth ? "password+firebase" : firebaseAuth.authProvider,
+      providerIds,
+      phoneNumber: profile.phoneNumber || firebaseAuth.phoneNumber || "",
+      email: firebaseAuth.email || profile.email || "",
+      displayName: firebaseAuth.displayName || profile.displayName || "",
+      googleLinkedAt: new Date().toISOString()
+    };
+    const update = buildEncryptedUserUpdate(
+      linkedProfile,
+      profile.discordId || "",
+      profile.guildId || ""
+    );
+    await User.updateOne({ _id: user._id }, { $set: update, $unset: LEGACY_USER_UNSET });
+
+    res.json({ ok: true, user: pickUserResponse(linkedProfile), authToken: createSessionToken(resolveProfileUserId(linkedProfile)) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || "GOOGLE_LINK_ERROR", message: e.message });
+  }
+});
+
 // ── Registration and Discord token APIs ───────────────────
 
 // 회원가입 처리 → 임시 토큰 발급
@@ -985,7 +1140,14 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/register/web", async (req, res) => {
   try {
     const userData = await buildRegistrationProfile(req.body);
-    requirePasswordAccount(userData);
+    const registrationMode = req.body?.registrationMode === "firebase" ? "firebase" : "password";
+    if (registrationMode === "firebase") {
+      if (!userData.firebaseUid) {
+        throw httpError(401, "FIREBASE_AUTH_REQUIRED", "SMS 또는 Google 인증이 필요합니다.");
+      }
+    } else {
+      requirePasswordAccount(userData);
+    }
     const encryptedUpdate = buildEncryptedUserUpdate(
       { ...userData, registrationSource: "web" },
       "",
@@ -1001,7 +1163,7 @@ app.post("/api/register/web", async (req, res) => {
       }
     );
 
-    res.json({ ok: true, user: pickUserResponse(userData) });
+    res.json({ ok: true, user: pickUserResponse(userData), authToken: createSessionToken(userData.userId) });
   } catch (e) {
     if (e?.code === 11000) {
       return res.status(409).json({ error: "USER_ID_DUPLICATE", message: "이미 사용 중인 회원 ID입니다." });

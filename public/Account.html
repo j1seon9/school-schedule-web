@@ -58,6 +58,17 @@
         <button class="reg-btn reg-btn-outline" id="logoutBtn" type="button">로그아웃</button>
 
         <div class="account-token-zone">
+          <p class="account-token-note">Google 계정을 연결하면 이후 Google 로그인으로도 같은 회원정보를 사용할 수 있습니다.</p>
+          <button class="reg-btn reg-btn-outline reg-google-btn" id="linkGoogleBtn" type="button">Google 계정 연동</button>
+          <div class="reg-auth-divider">또는 Firebase 이메일 계정</div>
+          <label class="reg-label" for="resetEmailInput">비밀번호 재설정 이메일</label>
+          <div class="reg-search-row">
+            <input id="resetEmailInput" type="email" class="reg-input" placeholder="example@example.com" autocomplete="email">
+            <button class="reg-btn reg-btn-outline" id="sendResetEmailBtn" type="button">재설정 메일 발송</button>
+          </div>
+        </div>
+
+        <div class="account-token-zone">
           <p class="account-token-note">Discord 봇 연동 토큰은 5분 동안 유효합니다. ID/비밀번호 계정은 비밀번호를 입력한 뒤 재발급하세요.</p>
           <label class="reg-label" for="reissueTokenPassword">비밀번호 확인</label>
           <div class="password-field">

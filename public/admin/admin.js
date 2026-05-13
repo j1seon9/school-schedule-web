@@ -44,8 +44,12 @@ function getSavedCredentials() {
 
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed?.id || !parsed?.password || !parsed?.key) return null;
-    return parsed;
+    if (!parsed?.id || !parsed?.password) return null;
+    return {
+      id: String(parsed.id).trim(),
+      password: String(parsed.password),
+      key: String(parsed.key || "").trim()
+    };
   } catch {
     return null;
   }
@@ -86,11 +90,12 @@ function updateAuthUi(loggedIn) {
 }
 
 function buildAuthHeaders(creds) {
-  return {
+  const headers = {
     "x-admin-id": creds.id,
-    "x-admin-password": creds.password,
-    "x-admin-key": creds.key
+    "x-admin-password": creds.password
   };
+  if (creds.key) headers["x-admin-key"] = creds.key;
+  return headers;
 }
 
 async function verifyCredentials(creds) {
@@ -370,8 +375,8 @@ function stopAutoRefresh() {
 
 async function applyLogin() {
   const creds = getInputCredentials();
-  if (!creds.id || !creds.password || !creds.key) {
-    setMessage(authMessageEl, "ID, 비밀번호, 인증키를 모두 입력하세요.", "error");
+  if (!creds.id || !creds.password) {
+    setMessage(authMessageEl, "관리자 ID와 비밀번호를 입력하세요.", "error");
     return;
   }
 
