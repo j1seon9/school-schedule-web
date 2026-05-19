@@ -528,6 +528,11 @@ function pickUserResponse(profile) {
     type:       profile.type || "",
     grade:      profile.grade,
     classNo:    profile.classNo,
+    email:      profile.email || "",
+    displayName: profile.displayName || "",
+    authProvider: profile.authProvider || "",
+    providerIds: Array.isArray(profile.providerIds) ? profile.providerIds : [],
+    googleLinkedAt: profile.googleLinkedAt || "",
     favorites:  normalizeFavorites(profile.favorites)
   };
 }

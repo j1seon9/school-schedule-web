@@ -86,6 +86,9 @@ function renderAccount() {
   if (!hasConfirmedUserId) return;
 
   const school = user.school || {};
+  const providerIds = Array.isArray(user.providerIds) ? user.providerIds : [];
+  const isGoogleLinked = providerIds.includes("google.com") || String(user.authProvider || "").includes("google");
+  const googleEmail = isGoogleLinked && user.email ? user.email : "";
   setText("accountUserId", userId);
   setText("accountSchoolName", school.name);
   setText("accountSchoolType", school.type);
@@ -93,6 +96,7 @@ function renderAccount() {
   setText("accountGrade", user.grade ? `${user.grade}학년` : "");
   setText("accountClassNo", user.classNo ? `${user.classNo}반` : "");
   setText("accountLoggedInAt", formatDateTime(user.loggedInAt));
+  setText("accountGoogleEmail", googleEmail || (isGoogleLinked ? "이메일 정보 없음" : "연동되지 않음"));
 }
 
 // ── Firebase session helpers ──────────────────────────────
@@ -222,6 +226,11 @@ async function linkGoogleAccount() {
       },
       grade: nextUser.grade || current.grade || "",
       classNo: nextUser.classNo || current.classNo || "",
+      email: nextUser.email || result.user.email || current.email || "",
+      displayName: nextUser.displayName || result.user.displayName || current.displayName || "",
+      authProvider: nextUser.authProvider || current.authProvider || "password+firebase",
+      providerIds: Array.isArray(nextUser.providerIds) ? nextUser.providerIds : Array.from(new Set([...(current.providerIds || []), "google.com"])),
+      googleLinkedAt: nextUser.googleLinkedAt || current.googleLinkedAt || new Date().toISOString(),
       loggedInAt: current.loggedInAt || Date.now()
     });
     renderAccount();

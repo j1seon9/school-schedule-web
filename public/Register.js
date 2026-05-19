@@ -413,6 +413,7 @@ function normalizePhoneNumber(value) {
 // ── Firebase SMS and Google auth ──────────────────────────
 
 async function initFirebaseAuth() {
+  if (!isFirebaseRegisterMode()) return;
   if (REDIRECTING_TO_LOCALHOST) return;
 
   const sendBtn = document.getElementById("sendPhoneBtn");
@@ -500,6 +501,7 @@ async function resetRecaptcha() {
 }
 
 async function signInWithGoogle() {
+  if (!isFirebaseRegisterMode()) return;
   if (!firebaseAuth) return setPhoneStatus("Firebase 인증 설정을 먼저 확인해 주세요.");
 
   const googleBtn = document.getElementById("googleAuthBtn");
@@ -538,6 +540,7 @@ async function signInWithGoogle() {
 }
 
 async function sendPhoneCode() {
+  if (!isFirebaseRegisterMode()) return;
   if (!firebaseAuth || !recaptchaVerifier) {
     return setPhoneStatus("Firebase 인증 설정을 먼저 확인해 주세요.");
   }
@@ -565,13 +568,14 @@ async function sendPhoneCode() {
     }
   } catch (e) {
     await resetRecaptcha();
-    setPhoneStatus(`인증 문자 발송에 실패했습니다: ${e.message}`);
+    setPhoneStatus(getPhoneAuthErrorMessage(e));
   } finally {
     sendBtn.disabled = false;
   }
 }
 
 async function confirmPhoneCode() {
+  if (!isFirebaseRegisterMode()) return;
   if (!phoneConfirmationResult) return setPhoneStatus("먼저 인증 문자를 받아 주세요.");
 
   const code = document.getElementById("phoneCode").value.trim();
@@ -632,6 +636,8 @@ async function searchSchool() {
   }
 }
 
+window.searchSchool = searchSchool;
+
 function selectSchool(school, liEl) {
   selectedSchool = school;
   document.querySelectorAll(".reg-school-list li").forEach(el => el.classList.remove("selected"));
@@ -681,11 +687,12 @@ function isRegistrationBasicsReady() {
   const grade = document.getElementById("grade")?.value.trim() || "";
   const classNo = document.getElementById("classNo")?.value.trim() || "";
   const userId = normalizeUserIdInput(document.getElementById("userId")?.value || "");
+  const accountReady = isPasswordRegisterMode() ? isPasswordAuthReady() : true;
   return Boolean(selectedSchool?.schoolCode && selectedSchool?.officeCode) &&
     Boolean(grade) &&
     Boolean(classNo) &&
     isValidUserId(userId) &&
-    isPasswordAuthReady();
+    accountReady;
 }
 
 function validateRegistrationBasics(messageId, options = {}) {
@@ -716,11 +723,13 @@ function validateRegistrationBasics(messageId, options = {}) {
   if (!isValidUserId(userId)) {
     return showAndFocus("회원 ID는 영문 소문자, 숫자, _, - 조합의 3~24자로 입력해 주세요.", "userId");
   }
-  if (!isValidPassword(password)) {
-    return showAndFocus("비밀번호는 영문과 숫자를 포함해 8~72자로 입력해 주세요.", "password");
-  }
-  if (password !== passwordConfirm) {
-    return showAndFocus("비밀번호 확인이 일치하지 않습니다.", "passwordConfirm");
+  if (isPasswordRegisterMode()) {
+    if (!isValidPassword(password)) {
+      return showAndFocus("비밀번호는 영문과 숫자를 포함해 8~72자로 입력해 주세요.", "password");
+    }
+    if (password !== passwordConfirm) {
+      return showAndFocus("비밀번호 확인이 일치하지 않습니다.", "passwordConfirm");
+    }
   }
 
   document.getElementById("userId").value = userId;
@@ -780,6 +789,11 @@ function persistRegisteredUser(user, authToken = "") {
     school,
     grade: user.grade || "",
     classNo: user.classNo || "",
+    email: user.email || "",
+    displayName: user.displayName || "",
+    authProvider: user.authProvider || "",
+    providerIds: Array.isArray(user.providerIds) ? user.providerIds : [],
+    googleLinkedAt: user.googleLinkedAt || "",
     loggedInAt: Date.now()
   }));
   if (Array.isArray(user.favorites)) {
@@ -806,8 +820,11 @@ async function submitRegister(mode = "web") {
   if (!document.getElementById("ageCheck").checked) {
     return showMsg("step2Msg", "만 14세 이상인 경우에만 가입할 수 있습니다.", "error");
   }
-  if (!firebaseIdToken && !isPasswordAuthReady()) {
-    return showMsg("step2Msg", "ID/비밀번호를 확인하거나 SMS 또는 Google 인증을 완료해 주세요.", "error");
+  if (isPasswordRegisterMode() && !isPasswordAuthReady()) {
+    return showMsg("step2Msg", "ID/비밀번호를 확인해 주세요.", "error");
+  }
+  if (isFirebaseRegisterMode() && !firebaseIdToken) {
+    return showMsg("step2Msg", "SMS 또는 Google 인증을 완료해 주세요.", "error");
   }
 
   const isDiscordMode = mode === "discord";
@@ -827,7 +844,7 @@ async function submitRegister(mode = "web") {
       grade:      document.getElementById("grade").value.trim(),
       classNo:    document.getElementById("classNo").value.trim(),
       userId:     normalizeUserIdInput(document.getElementById("userId").value),
-      password:   document.getElementById("password").value,
+      password:   isPasswordRegisterMode() ? document.getElementById("password").value : "",
       privacyAgreed: document.getElementById("agreeCheck").checked,
       privacyConfirmed: document.getElementById("agreeCheck").checked,
       termsAgreed: document.getElementById("termsAgreeCheck").checked,
@@ -835,6 +852,7 @@ async function submitRegister(mode = "web") {
       ageConfirmed: document.getElementById("ageCheck").checked,
       privacyReadAt: getPrivacyReadAt(),
       termsReadAt: getTermsReadAt(),
+      registrationMode: isFirebaseRegisterMode() ? "firebase" : "password",
       firebaseIdToken,
       firebaseAuthMethod
     };
@@ -927,7 +945,37 @@ function initPasswordToggles() {
   });
 }
 
+function applyRegisterModeUi() {
+  const passwordFields = document.getElementById("passwordRegisterFields");
+  const firebaseFields = document.getElementById("firebaseRegisterFields");
+  const authRegisterLink = document.getElementById("authRegisterLink");
+  const idRegisterLink = document.getElementById("idRegisterLink");
+  const subtitle = document.getElementById("registerModeSubtitle");
+  const submitBtn = document.getElementById("submitBtn");
+  const phoneStatus = document.getElementById("phoneStatus");
+
+  if (passwordFields) passwordFields.hidden = isFirebaseRegisterMode();
+  if (firebaseFields) firebaseFields.hidden = isPasswordRegisterMode();
+  if (authRegisterLink) authRegisterLink.hidden = isFirebaseRegisterMode();
+  if (idRegisterLink) idRegisterLink.hidden = isPasswordRegisterMode();
+
+  if (subtitle) {
+    subtitle.textContent = isFirebaseRegisterMode()
+      ? "SMS/Google 회원가입"
+      : "ID/비밀번호 회원가입";
+  }
+  if (submitBtn) {
+    submitBtn.textContent = isFirebaseRegisterMode()
+      ? "SMS/Google로 가입"
+      : "ID/비밀번호로 가입";
+  }
+  if (phoneStatus && isPasswordRegisterMode()) {
+    phoneStatus.textContent = "";
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  applyRegisterModeUi();
   updateLegalLinks();
   initLegalModal();
   initPasswordToggles();
@@ -936,7 +984,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updatePrivacyGate();
   initFirebaseAuth();
   document.getElementById("searchBtn")?.addEventListener("click", searchSchool);
-  document.getElementById("schoolInput").addEventListener("keydown", e => {
+  document.getElementById("schoolInput")?.addEventListener("keydown", e => {
     if (e.key === "Enter") searchSchool();
   });
   ["schoolInput", "grade", "classNo", "userId", "password", "passwordConfirm", "phoneNumber", "phoneCode"].forEach(id => {
@@ -948,7 +996,7 @@ document.addEventListener("DOMContentLoaded", () => {
   ["agreeCheck", "termsAgreeCheck", "ageCheck"].forEach(id => {
     document.getElementById(id)?.addEventListener("change", saveRegisterDraft);
   });
-  document.getElementById("phoneNumber").addEventListener("input", () => {
+  document.getElementById("phoneNumber")?.addEventListener("input", () => {
     phoneConfirmationResult = null;
     const confirmBtn = document.getElementById("confirmPhoneBtn");
     if (confirmBtn) confirmBtn.disabled = true;

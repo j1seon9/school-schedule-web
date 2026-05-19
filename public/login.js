@@ -96,6 +96,11 @@ function persistLoggedInUser(user, authToken = "") {
     school,
     grade: user.grade || "",
     classNo: user.classNo || "",
+    email: user.email || "",
+    displayName: user.displayName || "",
+    authProvider: user.authProvider || "",
+    providerIds: Array.isArray(user.providerIds) ? user.providerIds : [],
+    googleLinkedAt: user.googleLinkedAt || "",
     loggedInAt: Date.now()
   }));
   if (Array.isArray(user.favorites)) {
