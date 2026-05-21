@@ -304,7 +304,7 @@ const app = express();
 app.disable("x-powered-by");
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || CORS_ORIGINS.length === 0 || CORS_ORIGINS.includes(origin)) {
+    if (!origin || CORS_ORIGINS.includes(origin)) {
       return callback(null, true);
     }
     return callback(null, false);
