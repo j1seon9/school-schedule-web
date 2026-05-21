@@ -10,6 +10,7 @@ let firebaseIdToken = "";
 let firebaseAuthMethod = "";
 let firebaseClientConfig = null;
 let activeLegalModalType = "";
+let schoolSearchInFlight = false;
 const REGISTER_AUTH_PATHS = new Set(["/register/auth", "/register/firebase"]);
 const IS_FIREBASE_REGISTER_PAGE = REGISTER_AUTH_PATHS.has(window.location.pathname.toLowerCase());
 const PRIVACY_READ_KEY = "schoolBotPrivacyReadAt";
@@ -599,16 +600,21 @@ async function confirmPhoneCode() {
 
 // ── School search and account credentials ─────────────────
 
-async function searchSchool() {
+async function searchSchool(event) {
+  event?.preventDefault();
+  if (schoolSearchInFlight) return;
+
   const name = document.getElementById("schoolInput").value.trim();
   if (!name) return showMsg("step1Msg", "학교 이름을 입력하세요.", "error");
 
   const btn = document.getElementById("searchBtn");
+  schoolSearchInFlight = true;
   btn.disabled = true;
   btn.textContent = "검색 중...";
 
   try {
     const res = await fetch(`/api/searchSchool?name=${encodeURIComponent(name)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const listEl = document.getElementById("schoolList");
     listEl.innerHTML = "";
@@ -631,12 +637,31 @@ async function searchSchool() {
   } catch {
     showMsg("step1Msg", "검색 중 오류가 발생했습니다.", "error");
   } finally {
+    schoolSearchInFlight = false;
     btn.disabled = false;
     btn.textContent = "검색";
   }
 }
 
 window.searchSchool = searchSchool;
+
+function initSchoolSearch() {
+  const searchBtn = document.getElementById("searchBtn");
+  const schoolInput = document.getElementById("schoolInput");
+
+  if (searchBtn && !searchBtn.dataset.searchBound) {
+    searchBtn.addEventListener("click", searchSchool);
+    searchBtn.dataset.searchBound = "true";
+  }
+
+  if (schoolInput && !schoolInput.dataset.searchBound) {
+    schoolInput.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      searchSchool(event);
+    });
+    schoolInput.dataset.searchBound = "true";
+  }
+}
 
 function selectSchool(school, liEl) {
   selectedSchool = school;
@@ -983,10 +1008,7 @@ document.addEventListener("DOMContentLoaded", () => {
   clearResumeQuery();
   updatePrivacyGate();
   initFirebaseAuth();
-  document.getElementById("searchBtn")?.addEventListener("click", searchSchool);
-  document.getElementById("schoolInput")?.addEventListener("keydown", e => {
-    if (e.key === "Enter") searchSchool();
-  });
+  initSchoolSearch();
   ["schoolInput", "grade", "classNo", "userId", "password", "passwordConfirm", "phoneNumber", "phoneCode"].forEach(id => {
     document.getElementById(id)?.addEventListener("input", () => {
       saveRegisterDraft();
@@ -1025,3 +1047,11 @@ window.addEventListener("storage", e => {
     updatePrivacyGate();
   }
 });
+
+window.goStep1 = goStep1;
+window.goStep2 = goStep2;
+window.signInWithGoogle = signInWithGoogle;
+window.sendPhoneCode = sendPhoneCode;
+window.confirmPhoneCode = confirmPhoneCode;
+window.submitRegister = submitRegister;
+window.copyToken = copyToken;

@@ -207,6 +207,8 @@ async function loginWithPassword() {
 }
 
 window.loginWithPassword = loginWithPassword;
+window.goRegister = goRegister;
+window.hideMissingUser = hideMissingUser;
 
 // ── Password field UI ─────────────────────────────────────
 
@@ -387,6 +389,10 @@ async function confirmPhoneCode() {
     setLoginStatus(`인증번호 확인에 실패했습니다: ${e.message}`);
   }
 }
+
+window.signInWithGoogle = signInWithGoogle;
+window.sendPhoneCode = sendPhoneCode;
+window.confirmPhoneCode = confirmPhoneCode;
 
 // ── Page initialization ───────────────────────────────────
 
