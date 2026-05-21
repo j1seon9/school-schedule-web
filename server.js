@@ -20,8 +20,9 @@ const PORT        = Number(process.env.PORT  || 8000);
 const BASE_URL    = "https://open.neis.go.kr/hub";
 const MONGODB_URI = process.env.MONGODB_URI  || "mongodb://localhost:27017/discord_bot";
 
-const ADMIN_ID       = (process.env.ADMIN_ID       || "admin").trim();
-const ADMIN_PASSWORD =  process.env.ADMIN_PASSWORD || "admin1234";
+const ADMIN_ID       = (process.env.ADMIN_ID       || "").trim();
+const ADMIN_PASSWORD =  process.env.ADMIN_PASSWORD || "";
+
 const hasAdminAuthKeyConfig = typeof process.env.ADMIN_AUTH_KEY === "string";
 const ADMIN_AUTH_KEY = hasAdminAuthKeyConfig ? process.env.ADMIN_AUTH_KEY.trim() : "change-this-admin-key";
 const ADMIN_AUTH_KEY_REQUIRED = hasAdminAuthKeyConfig && ADMIN_AUTH_KEY.length > 0;
@@ -59,6 +60,10 @@ const ADMIN_VISIBLE_USER_ID = (process.env.ADMIN_VISIBLE_USER_ID || "example_adm
 if (!API_KEY) console.warn("[WARN] API_KEY is not set.");
 if (!DATA_ENCRYPTION_KEY) console.warn("[WARN] DATA_ENCRYPTION_KEY is not set; private data cannot be stored.");
 if (TEST_PHONE_AUTH_ENABLED) console.warn("[WARN] Test phone auth is enabled. Do not enable it in production.");
+if (!ADMIN_ID || !ADMIN_PASSWORD) {
+  console.error("[FATAL] Admin_ID 또는 ADMIN_PASSWORD가 설정되지 않았습니다.");
+  process.exit(1);
+}
 
 // ── Encryption and identity helpers ───────────────────────
 
