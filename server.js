@@ -25,6 +25,8 @@ const ADMIN_PASSWORD =  process.env.ADMIN_PASSWORD || "admin1234";
 const hasAdminAuthKeyConfig = typeof process.env.ADMIN_AUTH_KEY === "string";
 const ADMIN_AUTH_KEY = hasAdminAuthKeyConfig ? process.env.ADMIN_AUTH_KEY.trim() : "change-this-admin-key";
 const ADMIN_AUTH_KEY_REQUIRED = hasAdminAuthKeyConfig && ADMIN_AUTH_KEY.length > 0;
+const BOT_API_KEY = (process.env.BOT_API_KEY || "").trim();
+const BOT_API_KEY_REQUIRED = BOT_API_KEY.length > 0;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -160,6 +162,7 @@ const pendingTokenSchema = new mongoose.Schema({
   userData:  { type: Object, select: false },
   expiresAt: { type: Date,   required: true }
 });
+// MongoDB's TTL monitor is periodic, so expired token cleanup can be slightly delayed.
 pendingTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 const PendingToken = mongoose.model("PendingToken", pendingTokenSchema);
 
@@ -267,7 +270,7 @@ async function initDb() {
 
 mongoose.connection.on("disconnected", () => {
   dbConnected = false;
-  console.warn("⚠️ MongoDB 연결 끊김 → 재연결 시도");
+  console.warn("⚠️ MongoDB disconnected → trying to reconnect...");
   initDb();
 });
 
@@ -282,7 +285,7 @@ async function readNotices() {
     const docs = await Notice.find().sort({ createdAt: -1 }).limit(NOTICE_MAX_ITEMS);
     return docs.map(d => ({ id: d.id, text: d.text, date: d.date, createdAt: d.createdAt }));
   } catch (e) {
-    console.error("공지 읽기 오류:", e.message);
+    console.error("Error reading notices:", e.message);
     return [];
   }
 }
@@ -398,6 +401,14 @@ function requireAdminAuth(req, res, next) {
   const keyValid = ADMIN_AUTH_KEY_REQUIRED ? safeEqualText(key, ADMIN_AUTH_KEY) : true;
   const valid    = safeEqualText(id, ADMIN_ID) && safeEqualText(password, ADMIN_PASSWORD) && keyValid;
   if (!valid) return res.status(401).json({ error: "UNAUTHORIZED" });
+  return next();
+}
+
+function requireBotAuth(req, res, next) {
+  if (!BOT_API_KEY_REQUIRED) return next();
+
+  const key = String(req.get("x-bot-key") || "").trim();
+  if (!safeEqualText(key, BOT_API_KEY)) return res.status(401).json({ error: "UNAUTHORIZED" });
   return next();
 }
 
@@ -518,7 +529,20 @@ function decryptPendingUserData(pending) {
   throw new Error("PENDING_DATA_MISSING");
 }
 
-function pickUserResponse(profile) {
+function firstDateText(...values) {
+  for (const value of values) {
+    if (!value) continue;
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  return "";
+}
+
+function pickUserResponse(profile, documentDates = {}) {
+  const agreedAt = firstDateText(profile.agreedAt, documentDates.agreedAt);
+  const createdAt = firstDateText(profile.createdAt, documentDates.createdAt);
+  const updatedAt = firstDateText(profile.updatedAt, documentDates.updatedAt);
+
   return {
     userId: resolveProfileUserId(profile),
     schoolCode: profile.schoolCode,
@@ -533,6 +557,10 @@ function pickUserResponse(profile) {
     authProvider: profile.authProvider || "",
     providerIds: Array.isArray(profile.providerIds) ? profile.providerIds : [],
     googleLinkedAt: profile.googleLinkedAt || "",
+    serviceJoinedAt: firstDateText(agreedAt, createdAt, updatedAt),
+    agreedAt,
+    createdAt,
+    updatedAt,
     favorites:  normalizeFavorites(profile.favorites)
   };
 }
@@ -848,6 +876,34 @@ function formatDateToYmd(date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}${m}${d}`;
+}
+
+function pickQuery(req, fields) {
+  return Object.fromEntries(
+    fields.map(field => [field, String(req.query[field] || "").trim()])
+  );
+}
+
+function buildNeisUrl(dataset, params = {}) {
+  const query = new URLSearchParams({
+    KEY: API_KEY,
+    Type: "json",
+    ...params
+  });
+  return `${BASE_URL}/${dataset}?${query.toString()}`;
+}
+
+function getNeisRows(payload, dataset) {
+  const rows = payload?.[dataset]?.[1]?.row;
+  return Array.isArray(rows) ? rows : [];
+}
+
+function mapTimetableRows(rows) {
+  return rows.map(item => ({
+    date: item.ALL_TI_YMD,
+    period: item.PERIO,
+    subject: item.ITRT_CNTNT
+  }));
 }
 
 // ── Static pages and client configuration APIs ────────────
@@ -1178,7 +1234,7 @@ app.post("/api/register/web", async (req, res) => {
 });
 
 // 토큰 검증 + Discord ID 연결 (봇에서 호출)
-app.post("/api/verify", async (req, res) => {
+app.post("/api/verify", requireBotAuth, async (req, res) => {
   try {
     const { token, discordId, guildId } = req.body;
     if (!token || !discordId) return res.status(400).json({ error: "TOKEN_AND_DISCORDID_REQUIRED" });
@@ -1195,7 +1251,7 @@ app.post("/api/verify", async (req, res) => {
     const encryptedUpdate = buildEncryptedUserUpdate(userData, discordId, guildId);
     const userFilter = await resolveDiscordLinkTarget(encryptedUpdate);
 
-    await User.findOneAndUpdate(
+    const linkedUser = await User.findOneAndUpdate(
       userFilter,
       {
         $set: encryptedUpdate,
@@ -1207,7 +1263,7 @@ app.post("/api/verify", async (req, res) => {
 
     await PendingToken.deleteOne({ token });
 
-    res.json({ ok: true, user: pickUserResponse(userData) });
+    res.json({ ok: true, user: pickUserResponse(userData, linkedUser) });
   } catch (e) {
     if (e?.code === 11000) {
       return res.status(409).json({ error: "USER_ID_DUPLICATE", message: "이미 사용 중인 회원 ID입니다." });
@@ -1216,7 +1272,42 @@ app.post("/api/verify", async (req, res) => {
   }
 });
 
-// 사용자 정보 조회 (봇에서 호출)
+// Discord bot account APIs
+app.post("/api/discord/unlink", requireBotAuth, async (req, res) => {
+  try {
+    const discordId = String(req.body?.discordId || "").trim();
+    if (!discordId) return res.status(400).json({ error: "DISCORDID_REQUIRED" });
+
+    const discordIdHash = hashLookup("discordId", discordId);
+    const user = await User.findOne({ discordIdHash });
+    if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
+
+    const profile = decryptJson(user.encryptedProfile);
+    const cleanedProfile = {
+      ...profile,
+      discordId: "",
+      guildId: "",
+      discordUnlinkedAt: new Date().toISOString()
+    };
+    const encryptedUpdate = buildEncryptedUserUpdate(cleanedProfile, "", "");
+
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: encryptedUpdate,
+        $unset: {
+          ...LEGACY_USER_UNSET,
+          discordIdHash: ""
+        }
+      }
+    );
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "DISCORD_UNLINK_ERROR", message: e.message });
+  }
+});
+
 app.get("/api/user/:discordId", async (req, res) => {
   try {
     const discordId = String(req.params.discordId || "").trim();
@@ -1227,7 +1318,7 @@ app.get("/api/user/:discordId", async (req, res) => {
     if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
 
     const profile = decryptJson(user.encryptedProfile);
-    res.json(pickUserResponse(profile));
+    res.json(pickUserResponse(profile, user));
   } catch (e) {
     res.status(500).json({ error: "USER_FETCH_ERROR", message: e.message });
   }
@@ -1335,7 +1426,7 @@ app.get("/api/searchSchool", async (req, res) => {
     const name = String(req.query.name || "").trim();
     if (!name) return res.json([]);
 
-    const url = `${BASE_URL}/schoolInfo?KEY=${API_KEY}&Type=json&SCHUL_NM=${encodeURIComponent(name)}`;
+    const url = buildNeisUrl("schoolInfo", { SCHUL_NM: name });
     const payload = await fetchJson(url);
     const result = parseNeisResult(payload);
     if (result?.CODE && result.CODE !== "INFO-000" && result.CODE !== "INFO-200") {
@@ -1360,23 +1451,21 @@ app.get("/api/searchSchool", async (req, res) => {
 app.get("/api/dailyTimetable", async (req, res) => {
   if (!requireApiKey(res)) return;
   try {
-    const schoolCode = String(req.query.schoolCode || "").trim();
-    const officeCode = String(req.query.officeCode || "").trim();
-    const grade      = String(req.query.grade      || "").trim();
-    const classNo    = String(req.query.classNo    || "").trim();
+    const { schoolCode, officeCode, grade, classNo } = pickQuery(req, ["schoolCode", "officeCode", "grade", "classNo"]);
     if (!schoolCode || !officeCode || !grade || !classNo) return res.json([]);
 
     const date    = toKstDateKey();
     const dataset = await resolveDatasetBySchoolCode(schoolCode);
-    const url = `${BASE_URL}/${dataset}?KEY=${API_KEY}&Type=json` +
-      `&ATPT_OFCDC_SC_CODE=${officeCode}&SD_SCHUL_CODE=${schoolCode}&ALL_TI_YMD=${date}` +
-      `&GRADE=${grade}&CLASS_NM=${classNo}`;
+    const url = buildNeisUrl(dataset, {
+      ATPT_OFCDC_SC_CODE: officeCode,
+      SD_SCHUL_CODE: schoolCode,
+      ALL_TI_YMD: date,
+      GRADE: grade,
+      CLASS_NM: classNo
+    });
 
     const payload = await fetchJson(url);
-    const rows = payload?.[dataset]?.[1]?.row;
-    if (!Array.isArray(rows)) return res.json([]);
-
-    res.json(rows.map(item => ({ date: item.ALL_TI_YMD, period: item.PERIO, subject: item.ITRT_CNTNT })));
+    res.json(mapTimetableRows(getNeisRows(payload, dataset)));
   } catch (err) {
     res.status(500).json({ error: "NEIS_ERROR", message: err.message });
   }
@@ -1385,10 +1474,7 @@ app.get("/api/dailyTimetable", async (req, res) => {
 app.get("/api/weeklyTimetable", async (req, res) => {
   if (!requireApiKey(res)) return;
   try {
-    const schoolCode = String(req.query.schoolCode || "").trim();
-    const officeCode = String(req.query.officeCode || "").trim();
-    const grade      = String(req.query.grade      || "").trim();
-    const classNo    = String(req.query.classNo    || "").trim();
+    const { schoolCode, officeCode, grade, classNo } = pickQuery(req, ["schoolCode", "officeCode", "grade", "classNo"]);
     const startDate  = normalizeYmdInput(req.query.startDate);
     if (!schoolCode || !officeCode || !grade || !classNo || !startDate) return res.json([]);
 
@@ -1398,15 +1484,17 @@ app.get("/api/weeklyTimetable", async (req, res) => {
     const endDate = formatDateToYmd(end);
 
     const dataset = await resolveDatasetBySchoolCode(schoolCode);
-    const url = `${BASE_URL}/${dataset}?KEY=${API_KEY}&Type=json` +
-      `&ATPT_OFCDC_SC_CODE=${officeCode}&SD_SCHUL_CODE=${schoolCode}` +
-      `&GRADE=${grade}&CLASS_NM=${classNo}&TI_FROM_YMD=${startDate}&TI_TO_YMD=${endDate}`;
+    const url = buildNeisUrl(dataset, {
+      ATPT_OFCDC_SC_CODE: officeCode,
+      SD_SCHUL_CODE: schoolCode,
+      GRADE: grade,
+      CLASS_NM: classNo,
+      TI_FROM_YMD: startDate,
+      TI_TO_YMD: endDate
+    });
 
     const payload = await fetchJson(url);
-    const rows = payload?.[dataset]?.[1]?.row;
-    if (!Array.isArray(rows)) return res.json([]);
-
-    res.json(rows.map(item => ({ date: item.ALL_TI_YMD, period: item.PERIO, subject: item.ITRT_CNTNT })));
+    res.json(mapTimetableRows(getNeisRows(payload, dataset)));
   } catch (err) {
     res.status(500).json({ error: "NEIS_ERROR", message: err.message });
   }
@@ -1415,13 +1503,15 @@ app.get("/api/weeklyTimetable", async (req, res) => {
 app.get("/api/dailyMeal", async (req, res) => {
   if (!requireApiKey(res)) return;
   try {
-    const schoolCode = String(req.query.schoolCode || "").trim();
-    const officeCode = String(req.query.officeCode || "").trim();
+    const { schoolCode, officeCode } = pickQuery(req, ["schoolCode", "officeCode"]);
     if (!schoolCode || !officeCode) return res.json({ menu: "" });
 
     const date = toKstDateKey();
-    const url = `${BASE_URL}/mealServiceDietInfo?KEY=${API_KEY}&Type=json` +
-      `&ATPT_OFCDC_SC_CODE=${officeCode}&SD_SCHUL_CODE=${schoolCode}&MLSV_YMD=${date}`;
+    const url = buildNeisUrl("mealServiceDietInfo", {
+      ATPT_OFCDC_SC_CODE: officeCode,
+      SD_SCHUL_CODE: schoolCode,
+      MLSV_YMD: date
+    });
 
     const payload = await fetchJson(url);
     const row = payload?.mealServiceDietInfo?.[1]?.row?.[0];
@@ -1434,15 +1524,17 @@ app.get("/api/dailyMeal", async (req, res) => {
 app.get("/api/monthlyMeal", async (req, res) => {
   if (!requireApiKey(res)) return;
   try {
-    const schoolCode = String(req.query.schoolCode || "").trim();
-    const officeCode = String(req.query.officeCode || "").trim();
+    const { schoolCode, officeCode } = pickQuery(req, ["schoolCode", "officeCode"]);
     const startDate  = normalizeYmdInput(req.query.startDate);
     const endDate    = normalizeYmdInput(req.query.endDate);
     if (!schoolCode || !officeCode || !startDate || !endDate) return res.json([]);
 
-    const url = `${BASE_URL}/mealServiceDietInfo?KEY=${API_KEY}&Type=json` +
-      `&ATPT_OFCDC_SC_CODE=${officeCode}&SD_SCHUL_CODE=${schoolCode}` +
-      `&MLSV_FROM_YMD=${startDate}&MLSV_TO_YMD=${endDate}`;
+    const url = buildNeisUrl("mealServiceDietInfo", {
+      ATPT_OFCDC_SC_CODE: officeCode,
+      SD_SCHUL_CODE: schoolCode,
+      MLSV_FROM_YMD: startDate,
+      MLSV_TO_YMD: endDate
+    });
 
     const payload = await fetchJson(url);
     const rows = payload?.mealServiceDietInfo?.[1]?.row;

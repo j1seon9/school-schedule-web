@@ -986,10 +986,6 @@ function initSchoolSearchEvents() {
 
 // ── Page initialization ───────────────────────────────────
 
-window.loadToday = loadToday;
-window.loadWeekly = loadWeekly;
-window.loadMonthlyMeal = loadMonthlyMeal;
-
 document.addEventListener("DOMContentLoaded", async () => {
   initTheme();
   updateRegisterLinks();

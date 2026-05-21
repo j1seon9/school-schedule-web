@@ -78,6 +78,9 @@ ADMIN_AUTH_KEY=change_this_admin_key
 ADMIN_VISIBLE_USER_ID=example_admin
 WEBHOOK_URL=
 
+# Discord Bot
+BOT_API_KEY=<shared bot API key>
+
 # Firebase Web App Configuration
 FIREBASE_WEB_API_KEY=<Firebase web config apiKey>
 FIREBASE_AUTH_DOMAIN=<Firebase web config authDomain>
@@ -136,6 +139,8 @@ db.createUser({
 - `pendingtokens.token` unique
 - `pendingtokens.expiresAt` TTL
 
+MongoDB TTL monitor는 주기적으로 동작하므로 만료 토큰이 정확히 5분 정각에 삭제되지 않을 수 있습니다. `/api/verify`는 만료 토큰을 확인하면 즉시 삭제합니다.
+
 ## 실행
 
 ```bash
@@ -170,6 +175,13 @@ node server.js
 3. 회원정보가 있으면 학교 설정을 브라우저에 반영하고 메인 페이지로 이동합니다.
 4. 회원정보가 없으면 `회원정보가 없습니다.`와 `회원가입 페이지로 이동할까요?` 안내를 표시하고 예/아니오 선택을 받습니다.
 5. 로그인 후에는 로그인/회원가입 메뉴가 숨겨지고, 정보관리 페이지에서 내 회원 정보를 확인하거나 탈퇴할 수 있습니다.
+
+## Discord 봇 연동 API
+
+- `POST /api/verify`: 봇이 `{ token, discordId, guildId }`를 보내면 토큰을 소비하고 Discord 계정을 연결합니다. `BOT_API_KEY`가 설정된 서버에서는 `x-bot-key` 헤더가 일치해야 하며, 불일치 시 `401 { "error": "UNAUTHORIZED" }`를 반환합니다.
+- `GET /api/user/:discordId`: Discord ID 기준으로 학교 설정과 `serviceJoinedAt`을 반환합니다. `serviceJoinedAt`은 `agreedAt`, `createdAt`, `updatedAt` 순서로 사용 가능한 가입일을 선택합니다.
+- `POST /api/discord/unlink`: 봇이 `{ discordId }`를 보내면 Discord 연결만 해제합니다. 웹 계정과 학교 설정은 유지되며, 이후 같은 Discord ID로 `/api/user/:discordId`를 조회하면 `404 { "error": "USER_NOT_FOUND" }`가 반환됩니다. 이 API도 `BOT_API_KEY`가 설정된 서버에서는 `x-bot-key`가 필요합니다.
+- 개발 환경에서 `BOT_API_KEY`를 비워두면 기존 봇 연동 방식이 유지됩니다. 배포 환경에서는 반드시 봇과 서버에 같은 값을 설정하세요.
 
 ## 참고 문서
 
