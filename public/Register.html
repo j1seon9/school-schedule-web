@@ -27,7 +27,7 @@
         <label class="reg-label">학교 이름</label>
         <div class="reg-search-row">
           <input id="schoolInput" type="text" class="reg-input" placeholder="학교 이름을 입력하세요">
-          <button class="reg-btn reg-btn-outline" id="searchBtn" type="button">검색</button>
+          <button class="reg-btn reg-btn-outline" id="searchBtn" type="button" onclick="searchSchool(event)">검색</button>
         </div>
 
         <ul class="reg-school-list" id="schoolList" style="display:none"></ul>
@@ -180,8 +180,8 @@
     <a href="https://discord.gg/2JbvBa2ykP" target="_blank" rel="noopener noreferrer">문의</a>
   </footer>
 
+  <script src="/Register.js?v=3.2.1-search-fix"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-  <script src="/register.js"></script>
 </body>
 </html>
