@@ -27,6 +27,10 @@ const ADMIN_AUTH_KEY = hasAdminAuthKeyConfig ? process.env.ADMIN_AUTH_KEY.trim()
 const ADMIN_AUTH_KEY_REQUIRED = hasAdminAuthKeyConfig && ADMIN_AUTH_KEY.length > 0;
 const BOT_API_KEY = (process.env.BOT_API_KEY || "").trim();
 const BOT_API_KEY_REQUIRED = BOT_API_KEY.length > 0;
+const CORS_ORIGINS = String(process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -292,7 +296,33 @@ async function readNotices() {
 
 // ── Express app and middleware ────────────────────────────
 const app = express();
-app.use(cors());
+app.disable("x-powered-by");
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || CORS_ORIGINS.length === 0 || CORS_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  }
+}));
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Content-Security-Policy", [
+    "default-src 'self'",
+    "script-src 'self' https://www.gstatic.com https://www.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com",
+    "frame-src 'self' https://*.firebaseapp.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+  ].join("; "));
+  next();
+});
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/register.js", (req, res) => {
@@ -1332,7 +1362,13 @@ app.get("/api/user/:discordId", async (req, res) => {
 
 // ── Health, notice, and admin APIs ────────────────────────
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", time: new Date().toISOString(), db: dbConnected });
+  const botKey = String(req.get("x-bot-key") || "").trim();
+  const includeDbStatus = BOT_API_KEY_REQUIRED && safeEqualText(botKey, BOT_API_KEY);
+  res.json({
+    status: "ok",
+    time: new Date().toISOString(),
+    ...(includeDbStatus ? { db: dbConnected } : {})
+  });
 });
 
 app.get("/api/notices", async (req, res) => {

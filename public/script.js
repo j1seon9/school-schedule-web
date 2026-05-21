@@ -707,9 +707,12 @@ async function loadNotices() {
       return;
     }
 
-    board.innerHTML = notices
-      .map((notice) => `<li>[${notice.date || "-"}] ${notice.text || ""}</li>`)
-      .join("");
+    board.innerHTML = "";
+    notices.forEach((notice) => {
+      const item = document.createElement("li");
+      item.textContent = `[${notice.date || "-"}] ${notice.text || ""}`;
+      board.appendChild(item);
+    });
   } catch {
     board.innerHTML = "<li>공지사항을 불러오지 못했습니다.</li>";
   }
