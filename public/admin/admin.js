@@ -9,6 +9,7 @@ const todayRequestsEl = document.getElementById("todayRequests");
 const cpuLoadEl = document.getElementById("cpuLoad");
 const memoryUsageEl = document.getElementById("memoryUsage");
 const noticeCountEl = document.getElementById("noticeCount");
+const adminInfoEl = document.getElementById("adminInfo");
 const ddosMetaEl = document.getElementById("ddosMeta");
 const ddosListEl = document.getElementById("ddosList");
 const noticeListEl = document.getElementById("noticeList");
@@ -44,11 +45,14 @@ function getSavedCredentials() {
 
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed?.id || !parsed?.password) return null;
+    if (!parsed?.adminToken && (!parsed?.id || !parsed?.password)) return null;
     return {
-      id: String(parsed.id).trim(),
-      password: String(parsed.password),
-      key: String(parsed.key || "").trim()
+      id: String(parsed.id || "").trim(),
+      password: String(parsed.password || ""),
+      key: String(parsed.key || "").trim(),
+      adminToken: String(parsed.adminToken || "").trim(),
+      displayName: String(parsed.displayName || "").trim(),
+      role: String(parsed.role || "admin").trim()
     };
   } catch {
     return null;
@@ -90,6 +94,9 @@ function updateAuthUi(loggedIn) {
 }
 
 function buildAuthHeaders(creds) {
+  if (creds.adminToken) {
+    return { Authorization: `Bearer ${creds.adminToken}` };
+  }
   const headers = {
     "x-admin-id": creds.id,
     "x-admin-password": creds.password
@@ -214,7 +221,9 @@ async function loadMonitor() {
   const cpuLoad = Number(data?.system?.cpuLoad || 0);
   const memoryMb = Number(data?.system?.memoryMb || 0);
   const notices = Number(data?.notices?.total || 0);
+  const admin = data?.admin || {};
 
+  if (adminInfoEl) adminInfoEl.textContent = admin.displayName || admin.adminId || "-";
   totalRequestsEl.textContent = String(total);
   todayRequestsEl.textContent = String(today);
   cpuLoadEl.textContent = cpuLoad.toFixed(2);

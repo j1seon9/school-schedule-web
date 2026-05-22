@@ -38,11 +38,14 @@ function getSavedCredentials() {
 
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed?.id || !parsed?.password) return null;
+    if (!parsed?.adminToken && (!parsed?.id || !parsed?.password)) return null;
     return {
-      id: String(parsed.id).trim(),
-      password: String(parsed.password),
-      key: String(parsed.key || "").trim()
+      id: String(parsed.id || "").trim(),
+      password: String(parsed.password || ""),
+      key: String(parsed.key || "").trim(),
+      adminToken: String(parsed.adminToken || "").trim(),
+      displayName: String(parsed.displayName || "").trim(),
+      role: String(parsed.role || "admin").trim()
     };
   } catch {
     return null;
@@ -57,6 +60,9 @@ function fillInputs(creds) {
 }
 
 function buildAuthHeaders(creds) {
+  if (creds.adminToken) {
+    return { Authorization: `Bearer ${creds.adminToken}` };
+  }
   const headers = {
     "x-admin-id": creds.id,
     "x-admin-password": creds.password

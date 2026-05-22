@@ -148,6 +148,16 @@ const noticeSchema = new mongoose.Schema({
 noticeSchema.index({ createdAt: -1 });
 const Notice = mongoose.model("Notice", noticeSchema);
 
+const adminSchema = new mongoose.Schema({
+  adminIdHash: { type: String, required: true, unique: true },
+  encryptedAdmin: { type: String, required: true },
+  passwordAuth: { type: Object, required: true },
+  role: { type: String, default: "admin" },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+const Admin = mongoose.model("Admin", adminSchema);
+
 // 사용자
 const userSchema = new mongoose.Schema({
   discordIdHash:   { type: String, unique: true, sparse: true },
@@ -244,8 +254,10 @@ async function ensureDbIndexes() {
       console.log("Dropped legacy users.discordId index");
     }
     await migrateLegacyUsers();
+    await ensureDefaultAdmin();
     await Promise.all([
       Notice.createIndexes(),
+      Admin.createIndexes(),
       User.createIndexes(),
       PendingToken.createIndexes()
     ]);
@@ -416,6 +428,17 @@ function createSessionToken(userId) {
   return `${body}.${signSessionPayload(body)}`;
 }
 
+function createAdminSessionToken(adminId) {
+  const normalizedAdminId = normalizeUserId(adminId);
+  if (!normalizedAdminId) throw httpError(400, "ADMIN_ID_REQUIRED", "관리자 ID가 필요합니다.");
+  const body = Buffer.from(JSON.stringify({
+    role: "admin",
+    adminId: normalizedAdminId,
+    exp: Date.now() + SESSION_TTL_MS
+  }), "utf8").toString("base64url");
+  return `${body}.${signSessionPayload(body)}`;
+}
+
 function verifySessionToken(token) {
   const [body, signature] = String(token || "").split(".");
   if (!body || !signature || !safeEqualText(signature, signSessionPayload(body))) {
@@ -435,13 +458,101 @@ function verifySessionToken(token) {
   return userId;
 }
 
-function requireAdminAuth(req, res, next) {
+function verifyAdminSessionToken(token) {
+  const [body, signature] = String(token || "").split(".");
+  if (!body || !signature || !safeEqualText(signature, signSessionPayload(body))) {
+    throw httpError(401, "SESSION_INVALID", "관리자 세션이 유효하지 않습니다.");
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+  } catch {
+    throw httpError(401, "SESSION_INVALID", "관리자 세션이 유효하지 않습니다.");
+  }
+  const adminId = normalizeUserId(payload?.adminId);
+  if (payload?.role !== "admin" || !adminId || Number(payload?.exp) < Date.now()) {
+    throw httpError(401, "SESSION_EXPIRED", "관리자 세션이 만료되었습니다.");
+  }
+  return adminId;
+}
+
+function pickAdminResponse(profile = {}, doc = {}) {
+  return {
+    adminId: normalizeUserId(profile.adminId),
+    displayName: profile.displayName || profile.adminId || "",
+    role: profile.role || doc.role || "admin",
+    createdAt: firstDateText(profile.createdAt, doc.createdAt),
+    updatedAt: firstDateText(profile.updatedAt, doc.updatedAt)
+  };
+}
+
+function buildEncryptedAdmin(adminId, password, existingProfile = {}) {
+  const now = new Date();
+  const normalizedAdminId = normalizeUserId(adminId);
+  const profile = {
+    ...existingProfile,
+    adminId: normalizedAdminId,
+    displayName: existingProfile.displayName || normalizedAdminId,
+    role: existingProfile.role || "admin",
+    updatedAt: now.toISOString()
+  };
+  if (!profile.createdAt) profile.createdAt = now.toISOString();
+  return {
+    adminIdHash: hashLookup("adminId", normalizedAdminId),
+    encryptedAdmin: encryptJson(profile),
+    passwordAuth: createPasswordAuth(password),
+    role: profile.role,
+    updatedAt: now
+  };
+}
+
+async function findAdminByCredentials(adminId, password) {
+  const normalizedAdminId = normalizeUserId(adminId);
+  if (!normalizedAdminId || !password) return null;
+  const admin = await Admin.findOne({ adminIdHash: hashLookup("adminId", normalizedAdminId) });
+  if (!admin?.encryptedAdmin || !verifyPasswordAuth(password, admin.passwordAuth)) return null;
+  const profile = decryptJson(admin.encryptedAdmin);
+  return { admin, profile };
+}
+
+async function ensureDefaultAdmin() {
+  if (!ADMIN_ID || !ADMIN_PASSWORD || !encryptionKey) return;
+  const normalizedAdminId = normalizeUserId(ADMIN_ID);
+  if (!normalizedAdminId) return;
+  const adminIdHash = hashLookup("adminId", normalizedAdminId);
+  const existing = await Admin.findOne({ adminIdHash });
+  if (existing) return;
+  await Admin.create({
+    ...buildEncryptedAdmin(normalizedAdminId, ADMIN_PASSWORD),
+    createdAt: new Date()
+  });
+  console.log("Default admin account saved to MongoDB");
+}
+
+async function requireAdminAuth(req, res, next) {
+  const bearerToken = getBearerToken(req);
+  if (bearerToken) {
+    try {
+      const adminId = verifyAdminSessionToken(bearerToken);
+      const admin = await Admin.findOne({ adminIdHash: hashLookup("adminId", adminId) });
+      if (admin) {
+        req.admin = { id: adminId, doc: admin };
+        return next();
+      }
+    } catch {
+      // Fall through to legacy header auth below.
+    }
+  }
+
   const id       = String(req.get("x-admin-id")       || "").trim();
   const password = String(req.get("x-admin-password") || "");
   const key      = String(req.get("x-admin-key")      || "").trim();
   const keyValid = ADMIN_AUTH_KEY_REQUIRED ? safeEqualText(key, ADMIN_AUTH_KEY) : true;
-  const valid    = safeEqualText(id, ADMIN_ID) && safeEqualText(password, ADMIN_PASSWORD) && keyValid;
-  if (!valid) return res.status(401).json({ error: "UNAUTHORIZED" });
+  const adminAuth = keyValid ? await findAdminByCredentials(id, password) : null;
+  const envValid = keyValid && safeEqualText(id, ADMIN_ID) && safeEqualText(password, ADMIN_PASSWORD);
+  if (!adminAuth && !envValid) return res.status(401).json({ error: "UNAUTHORIZED" });
+  req.admin = { id: normalizeUserId(id), doc: adminAuth?.admin || null };
   return next();
 }
 
@@ -1034,6 +1145,17 @@ app.post("/api/login/password", async (req, res) => {
       return res.status(400).json({ error: "PASSWORD_REQUIRED", message: "비밀번호를 입력해 주세요." });
     }
 
+    const adminAuth = await findAdminByCredentials(normalizedUserId, password);
+    if (adminAuth) {
+      return res.json({
+        ok: true,
+        role: "admin",
+        admin: pickAdminResponse(adminAuth.profile, adminAuth.admin),
+        adminToken: createAdminSessionToken(normalizedUserId),
+        redirectTo: "/admin"
+      });
+    }
+
     const user = await User.findOne({ userIdHash: hashLookup("userId", normalizedUserId) });
     if (!user?.encryptedProfile) {
       return res.status(404).json({ error: "USER_NOT_FOUND", message: "회원정보가 없습니다." });
@@ -1385,11 +1507,24 @@ app.get("/api/notices", async (req, res) => {
   }
 });
 
+app.get("/api/admin/me", requireAdminAuth, async (req, res) => {
+  try {
+    const admin = req.admin?.doc || await Admin.findOne({ adminIdHash: hashLookup("adminId", req.admin?.id || "") });
+    if (!admin?.encryptedAdmin) return res.status(404).json({ error: "ADMIN_NOT_FOUND" });
+    const profile = decryptJson(admin.encryptedAdmin);
+    res.json({ ok: true, admin: pickAdminResponse(profile, admin) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.code || "ADMIN_ME_ERROR", message: err.message });
+  }
+});
+
 app.get("/admin/monitor", requireAdminAuth, async (req, res) => {
   try {
     const notices = await readNotices();
     const ddos = getDdosSnapshot();
+    const adminProfile = req.admin?.doc?.encryptedAdmin ? decryptJson(req.admin.doc.encryptedAdmin) : null;
     res.json({
+      admin: adminProfile ? pickAdminResponse(adminProfile, req.admin.doc) : { adminId: req.admin?.id || "", role: "admin" },
       traffic:  { total: totalRequests, today: todayRequests },
       system:   getSystemSnapshot(),
       security: { trackedIps: ddos.trackedIps, suspiciousCount: ddos.suspicious.length, rateLimit: RATE_LIMIT, windowMs: WINDOW_MS },

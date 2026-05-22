@@ -89,6 +89,8 @@ FIREBASE_APP_ID=<Firebase web config appId, e.g. 1:198944642051:web:...>
 FIREBASE_MESSAGING_SENDER_ID=<Your Firebase messaging sender id>
 ```
 
+`ADMIN_ID`와 `ADMIN_PASSWORD`는 서버 시작 시 MongoDB `admins` 컬렉션에 기본 관리자 계정이 없을 때 초기 관리자 정보로 저장됩니다. 이후 `/login`에서 같은 ID/비밀번호로 로그인하면 관리자 세션을 발급하고 `/admin`으로 이동합니다.
+
 ## Firebase 설정
 
 1. Firebase Console에서 프로젝트를 생성합니다.

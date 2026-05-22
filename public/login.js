@@ -112,6 +112,15 @@ function saveAdminCredentials(creds) {
   sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(creds));
 }
 
+function saveAdminSession(admin, adminToken) {
+  sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify({
+    id: admin?.adminId || "",
+    role: admin?.role || "admin",
+    displayName: admin?.displayName || admin?.adminId || "",
+    adminToken: adminToken || ""
+  }));
+}
+
 function buildAdminAuthHeaders(creds) {
   const headers = {
     "x-admin-id": creds.id,
@@ -172,14 +181,6 @@ async function loginWithPassword() {
   loginBtn.disabled = true;
   setLoginStatus("회원정보를 확인하는 중입니다...");
   try {
-    const isAdmin = await tryAdminLogin(userId, password);
-    if (isAdmin) {
-      localStorage.removeItem("schoolBotLoginUser");
-      setLoginStatus("관리자 로그인 페이지로 이동합니다.", true);
-      window.location.href = "/admin/login.html";
-      return;
-    }
-
     const response = await fetch("/api/login/password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -193,6 +194,14 @@ async function loginWithPassword() {
     }
     if (!response.ok) {
       setLoginStatus(data.message || data.error || "로그인에 실패했습니다.");
+      return;
+    }
+
+    if (data.role === "admin" && data.adminToken) {
+      localStorage.removeItem("schoolBotLoginUser");
+      saveAdminSession(data.admin, data.adminToken);
+      setLoginStatus("관리자 로그인 완료. 관리자 페이지로 이동합니다.", true);
+      window.location.href = data.redirectTo || "/admin";
       return;
     }
 
