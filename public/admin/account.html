@@ -1,0 +1,60 @@
+<!-- public/admin/account.html -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>관리자 계정</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div class="dashboard">
+    <header class="topbar">
+      <h1>관리자 계정</h1>
+      <nav class="admin-nav">
+        <a href="/admin/admin.html">대시보드</a>
+        <a href="/">서비스 화면</a>
+      </nav>
+    </header>
+
+    <section class="panel admin-account-panel">
+      <h2>계정 정보</h2>
+      <dl class="admin-account-list">
+        <div>
+          <dt>관리자 ID</dt>
+          <dd id="adminAccountId">-</dd>
+        </div>
+        <div>
+          <dt>권한</dt>
+          <dd id="adminAccountRole">-</dd>
+        </div>
+        <div>
+          <dt>Discord 연동</dt>
+          <dd id="adminAccountDiscord">-</dd>
+        </div>
+        <div>
+          <dt>생성일</dt>
+          <dd id="adminAccountCreated">-</dd>
+        </div>
+      </dl>
+      <p id="adminAccountMessage">관리자 정보를 불러오는 중입니다.</p>
+    </section>
+
+    <section class="panel admin-account-panel">
+      <h2>Discord 연동</h2>
+      <p class="admin-help">토큰을 발급한 뒤 Discord 봇의 로그인 명령어에 입력하면 관리자 Discord 계정으로 연결됩니다.</p>
+      <div class="row">
+        <button id="issueDiscordTokenBtn" type="button">Discord 연동 토큰 발급</button>
+        <button id="copyDiscordTokenBtn" type="button" disabled>복사</button>
+      </div>
+      <div class="admin-token-box" id="adminTokenBox">
+        <span>토큰</span>
+        <strong id="adminDiscordToken">------</strong>
+      </div>
+      <p id="adminDiscordMessage"></p>
+    </section>
+  </div>
+
+  <script src="account.js"></script>
+</body>
+</html>

@@ -109,9 +109,9 @@ body {
 }
 
 .user-profile-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   border: 1px solid var(--border-color);
 }
@@ -125,6 +125,81 @@ body {
 .user-profile-id {
   font-size: 18px;
   font-weight: 900;
+  text-align: right;
+}
+
+.user-profile-detail {
+  color: var(--muted);
+  font-size: 14px;
+  grid-column: 1 / -1;
+}
+
+.user-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  grid-column: 1 / -1;
+}
+
+.user-profile-card.admin-profile-card {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.user-profile-card.admin-profile-card .user-profile-label {
+  font-size: 15px;
+}
+
+.user-profile-card.admin-profile-card .user-profile-id {
+  text-align: left;
+}
+
+.user-profile-card.admin-profile-card .user-profile-detail {
+  color: var(--text-color);
+  font-size: 15px;
+}
+
+.user-profile-card.admin-profile-card .user-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.user-profile-card.admin-profile-card .admin-profile-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 42px;
+  margin-top: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #334155;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.user-profile-card.admin-profile-card .admin-profile-button:hover {
+  filter: brightness(0.96);
+}
+
+#loginUserCard .reg-token-box,
+#adminDiscordTokenStatus {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 520px) {
+  .user-profile-card {
+    grid-template-columns: 1fr;
+  }
+
+  .user-profile-id {
+    text-align: left;
+  }
 }
 
 .account-card {

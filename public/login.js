@@ -112,15 +112,6 @@ function saveAdminCredentials(creds) {
   sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(creds));
 }
 
-function saveAdminSession(admin, adminToken) {
-  sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify({
-    id: admin?.adminId || "",
-    role: admin?.role || "admin",
-    displayName: admin?.displayName || admin?.adminId || "",
-    adminToken: adminToken || ""
-  }));
-}
-
 function buildAdminAuthHeaders(creds) {
   const headers = {
     "x-admin-id": creds.id,
@@ -199,9 +190,9 @@ async function loginWithPassword() {
 
     if (data.role === "admin" && data.adminToken) {
       localStorage.removeItem("schoolBotLoginUser");
-      saveAdminSession(data.admin, data.adminToken);
-      setLoginStatus("관리자 로그인 완료. 관리자 페이지로 이동합니다.", true);
-      window.location.href = data.redirectTo || "/admin";
+      sessionStorage.removeItem(ADMIN_STORAGE_KEY);
+      setLoginStatus("관리자 계정입니다. 관리자 로그인 페이지로 이동합니다.", true);
+      window.location.href = data.redirectTo || "/admin/login.html";
       return;
     }
 

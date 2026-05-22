@@ -187,6 +187,14 @@ node server.js
 
 ## 참고 문서
 
+### Discord bot response contract
+
+- `/health` always returns `status` and `time`; the `db` field is included only when `x-bot-key` matches `BOT_API_KEY`.
+- `/api/verify`, `/api/user/:discordId`, and `/api/discord/unlink` require `x-bot-key` when `BOT_API_KEY` is configured.
+- `/api/user/:discordId` returns a bot-scoped profile only. Web-only fields such as `email`, `providerIds`, and `favorites` are excluded.
+- `/api/discord/unlink` only removes Discord linkage. It does not delete the web account or school settings.
+- `/api/dailyMeal` returns `{ "date": "YYYYMMDD", "menu": "..." }`; `menu` is kept for existing bot compatibility.
+
 - [Firebase Phone Auth for Web](https://firebase.google.com/docs/auth/web/phone-auth)
 - [Firebase Google Sign-In for Web](https://firebase.google.com/docs/auth/web/google-signin)
 - [Firebase Auth REST API](https://firebase.google.com/docs/reference/rest/auth)

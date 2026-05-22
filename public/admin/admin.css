@@ -32,6 +32,13 @@ body {
   text-decoration: none;
 }
 
+.admin-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .panel {
   background: #1e293b;
   border-radius: 12px;
@@ -73,6 +80,8 @@ body {
 
 #authMessage,
 #noticeMessage,
+#adminAccountMessage,
+#adminDiscordMessage,
 #ddosMeta {
   margin: 10px 0 0;
   color: #94a3b8;
@@ -80,12 +89,16 @@ body {
 }
 
 #authMessage.error,
-#noticeMessage.error {
+#noticeMessage.error,
+#adminAccountMessage.error,
+#adminDiscordMessage.error {
   color: #fca5a5;
 }
 
 #authMessage.ok,
-#noticeMessage.ok {
+#noticeMessage.ok,
+#adminAccountMessage.ok,
+#adminDiscordMessage.ok {
   color: #86efac;
 }
 
@@ -117,7 +130,14 @@ body {
 }
 
 .chart-wrap {
+  height: 260px;
   min-height: 260px;
+}
+
+#requestsChart {
+  display: block;
+  width: 100%;
+  height: 260px;
 }
 
 #noticeInput {
@@ -131,6 +151,62 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.admin-account-panel {
+  max-width: 760px;
+}
+
+.admin-account-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.admin-account-list div {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 0;
+}
+
+.admin-account-list dt {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.admin-account-list dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.admin-help {
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.admin-token-box {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 12px;
+  background: #0b1220;
+}
+
+.admin-token-box span {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.admin-token-box strong {
+  font-size: 22px;
+  letter-spacing: 2px;
 }
 
 #noticeList,
@@ -195,6 +271,20 @@ body {
   }
 
   .panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-nav {
+    justify-content: flex-start;
+  }
+
+  .admin-account-list div,
+  .admin-token-box {
     grid-template-columns: 1fr;
   }
 }

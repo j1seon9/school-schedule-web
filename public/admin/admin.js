@@ -31,6 +31,7 @@ const chartValues = [];
 
 let refreshTimer;
 let requestsChart;
+let fallbackChartReady = false;
 
 function setMessage(el, message, type = "") {
   if (!el) return;
@@ -150,7 +151,12 @@ async function adminFetch(url, options = {}) {
 }
 
 function initChart() {
-  if (typeof Chart === "undefined" || !requestsChartEl) return;
+  if (!requestsChartEl) return;
+  if (typeof Chart === "undefined") {
+    fallbackChartReady = true;
+    drawFallbackChart();
+    return;
+  }
 
   requestsChart = new Chart(requestsChartEl, {
     type: "line",
@@ -172,9 +178,53 @@ function initChart() {
   });
 }
 
-function pushChartPoint(totalRequests) {
-  if (!requestsChart) return;
+function drawFallbackChart() {
+  if (!fallbackChartReady || !requestsChartEl) return;
+  const canvas = requestsChartEl;
+  const rect = canvas.parentElement?.getBoundingClientRect();
+  const width = Math.max(320, Math.floor(rect?.width || canvas.clientWidth || 640));
+  const height = 260;
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
 
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#0b1220";
+  ctx.fillRect(0, 0, width, height);
+
+  const padding = 28;
+  const maxValue = Math.max(1, ...chartValues);
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const y = padding + ((height - padding * 2) * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(padding, y);
+    ctx.lineTo(width - padding, y);
+    ctx.stroke();
+  }
+
+  if (!chartValues.length) {
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "14px Segoe UI, sans-serif";
+    ctx.fillText("트래픽 데이터를 불러오는 중...", padding, height / 2);
+    return;
+  }
+
+  ctx.strokeStyle = "#60a5fa";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  chartValues.forEach((value, index) => {
+    const x = padding + ((width - padding * 2) * index) / Math.max(1, chartValues.length - 1);
+    const y = height - padding - ((height - padding * 2) * Number(value || 0)) / maxValue;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function pushChartPoint(totalRequests) {
   chartLabels.push(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
   chartValues.push(Number(totalRequests) || 0);
 
@@ -183,7 +233,8 @@ function pushChartPoint(totalRequests) {
     chartValues.shift();
   }
 
-  requestsChart.update();
+  if (requestsChart) requestsChart.update();
+  else drawFallbackChart();
 }
 
 function renderDdos(data) {
@@ -224,6 +275,16 @@ async function loadMonitor() {
   const admin = data?.admin || {};
 
   if (adminInfoEl) adminInfoEl.textContent = admin.displayName || admin.adminId || "-";
+  const savedCreds = getSavedCredentials();
+  if (savedCreds) {
+    saveCredentials({
+      ...savedCreds,
+      id: savedCreds.id || admin.adminId || "",
+      displayName: admin.displayName || admin.adminId || savedCreds.displayName || "",
+      role: admin.role || savedCreds.role || "admin",
+      discordLinked: Boolean(admin.discordLinked)
+    });
+  }
   totalRequestsEl.textContent = String(total);
   todayRequestsEl.textContent = String(today);
   cpuLoadEl.textContent = cpuLoad.toFixed(2);

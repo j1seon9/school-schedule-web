@@ -150,6 +150,7 @@ const Notice = mongoose.model("Notice", noticeSchema);
 
 const adminSchema = new mongoose.Schema({
   adminIdHash: { type: String, required: true, unique: true },
+  discordIdHash: { type: String, unique: true, sparse: true },
   encryptedAdmin: { type: String, required: true },
   passwordAuth: { type: Object, required: true },
   role: { type: String, default: "admin" },
@@ -482,6 +483,8 @@ function pickAdminResponse(profile = {}, doc = {}) {
     adminId: normalizeUserId(profile.adminId),
     displayName: profile.displayName || profile.adminId || "",
     role: profile.role || doc.role || "admin",
+    discordLinked: Boolean(profile.discordId || doc.discordIdHash),
+    discordLinkedAt: firstDateText(profile.discordLinkedAt, profile.updatedAt, doc.updatedAt),
     createdAt: firstDateText(profile.createdAt, doc.createdAt),
     updatedAt: firstDateText(profile.updatedAt, doc.updatedAt)
   };
@@ -503,6 +506,47 @@ function buildEncryptedAdmin(adminId, password, existingProfile = {}) {
     encryptedAdmin: encryptJson(profile),
     passwordAuth: createPasswordAuth(password),
     role: profile.role,
+    updatedAt: now
+  };
+}
+
+function buildAdminProfileUpdate(profile, discordId = "", guildId = "") {
+  const now = new Date();
+  const normalizedAdminId = normalizeUserId(profile.adminId);
+  const normalizedDiscordId = String(discordId || "").trim();
+  const nextProfile = {
+    ...profile,
+    adminId: normalizedAdminId,
+    role: profile.role || "admin",
+    discordId: normalizedDiscordId,
+    guildId: guildId || "",
+    updatedAt: now.toISOString()
+  };
+  return {
+    adminIdHash: hashLookup("adminId", normalizedAdminId),
+    discordIdHash: normalizedDiscordId ? hashLookup("discordId", normalizedDiscordId) : undefined,
+    encryptedAdmin: encryptJson(nextProfile),
+    role: nextProfile.role,
+    updatedAt: now
+  };
+}
+
+function buildAdminDiscordUnlinkUpdate(profile = {}) {
+  const now = new Date();
+  const normalizedAdminId = normalizeUserId(profile.adminId);
+  const nextProfile = {
+    ...profile,
+    adminId: normalizedAdminId,
+    discordId: "",
+    guildId: "",
+    discordLinkedAt: "",
+    discordUnlinkedAt: now.toISOString(),
+    updatedAt: now.toISOString()
+  };
+  return {
+    adminIdHash: hashLookup("adminId", normalizedAdminId),
+    encryptedAdmin: encryptJson(nextProfile),
+    role: nextProfile.role || "admin",
     updatedAt: now
   };
 }
@@ -560,8 +604,27 @@ function requireBotAuth(req, res, next) {
   if (!BOT_API_KEY_REQUIRED) return next();
 
   const key = String(req.get("x-bot-key") || "").trim();
-  if (!safeEqualText(key, BOT_API_KEY)) return res.status(401).json({ error: "UNAUTHORIZED" });
+  if (!safeEqualText(key, BOT_API_KEY)) return sendError(res, 401, "UNAUTHORIZED");
   return next();
+}
+
+const ERROR_MESSAGES = Object.freeze({
+  UNAUTHORIZED: "봇 인증 키가 올바르지 않습니다.",
+  TOKEN_NOT_FOUND: "토큰을 찾을 수 없습니다.",
+  TOKEN_EXPIRED: "토큰이 만료되었습니다.",
+  USER_NOT_FOUND: "서버에 연결된 회원 정보가 없습니다.",
+  RATE_LIMIT: "요청이 너무 많습니다. 잠시 후 다시 시도하세요.",
+  TOKEN_AND_DISCORDID_REQUIRED: "토큰과 Discord ID가 필요합니다.",
+  DISCORDID_REQUIRED: "Discord ID가 필요합니다.",
+  ADMIN_NOT_FOUND: "관리자 계정을 찾을 수 없습니다."
+});
+
+function errorBody(code, message = "") {
+  return { error: code, message: message || ERROR_MESSAGES[code] || code };
+}
+
+function sendError(res, status, code, message = "") {
+  return res.status(status).json(errorBody(code, message));
 }
 
 function pruneIpCounter(now = Date.now()) {
@@ -605,7 +668,7 @@ app.use((req, res, next) => {
   recent.push(now);
   ipCounter.set(ip, recent);
 
-  if (recent.length > RATE_LIMIT) return res.status(429).json({ error: "RATE_LIMIT" });
+  if (recent.length > RATE_LIMIT) return sendError(res, 429, "RATE_LIMIT");
   return next();
 });
 
@@ -714,6 +777,41 @@ function pickUserResponse(profile, documentDates = {}) {
     createdAt,
     updatedAt,
     favorites:  normalizeFavorites(profile.favorites)
+  };
+}
+
+function pickBotUserResponse(profile, documentDates = {}) {
+  const user = pickUserResponse(profile, documentDates);
+  return {
+    accountType: "user",
+    userId: user.userId,
+    schoolCode: user.schoolCode,
+    officeCode: user.officeCode,
+    schoolName: user.schoolName,
+    officeName: user.officeName,
+    type: user.type,
+    grade: user.grade,
+    classNo: user.classNo,
+    serviceJoinedAt: user.serviceJoinedAt,
+    agreedAt: user.agreedAt,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
+  };
+}
+
+function pickBotAdminResponse(profile = {}, doc = {}) {
+  const admin = pickAdminResponse(profile, doc);
+  return {
+    accountType: "admin",
+    adminId: admin.adminId,
+    userId: admin.adminId,
+    displayName: admin.displayName || admin.adminId,
+    role: admin.role,
+    serviceJoinedAt: firstDateText(profile.serviceJoinedAt, profile.createdAt, doc.createdAt, profile.updatedAt, doc.updatedAt),
+    createdAt: admin.createdAt,
+    updatedAt: admin.updatedAt,
+    discordLinkedAt: admin.discordLinkedAt,
+    discordLinked: admin.discordLinked
   };
 }
 
@@ -1152,7 +1250,7 @@ app.post("/api/login/password", async (req, res) => {
         role: "admin",
         admin: pickAdminResponse(adminAuth.profile, adminAuth.admin),
         adminToken: createAdminSessionToken(normalizedUserId),
-        redirectTo: "/admin"
+        redirectTo: "/admin/login.html"
       });
     }
 
@@ -1400,17 +1498,42 @@ app.post("/api/register/web", async (req, res) => {
 app.post("/api/verify", requireBotAuth, async (req, res) => {
   try {
     const { token, discordId, guildId } = req.body;
-    if (!token || !discordId) return res.status(400).json({ error: "TOKEN_AND_DISCORDID_REQUIRED" });
+    if (!token || !discordId) return sendError(res, 400, "TOKEN_AND_DISCORDID_REQUIRED");
 
     const pending = await PendingToken.findOne({ token }).select("+userData");
-    if (!pending) return res.status(404).json({ error: "TOKEN_NOT_FOUND" });
+    if (!pending) return sendError(res, 404, "TOKEN_NOT_FOUND");
     if (pending.expiresAt < new Date()) {
       await PendingToken.deleteOne({ token });
-      return res.status(410).json({ error: "TOKEN_EXPIRED" });
+      return sendError(res, 410, "TOKEN_EXPIRED");
     }
 
     // 사용자 저장 (검색용 해시 + 암호화된 프로필)
     const userData = decryptPendingUserData(pending);
+    if (userData.accountType === "admin") {
+      const adminId = normalizeUserId(userData.adminId);
+      const admin = adminId ? await Admin.findOne({ adminIdHash: hashLookup("adminId", adminId) }) : null;
+      if (!admin?.encryptedAdmin) {
+        await PendingToken.deleteOne({ token });
+        return sendError(res, 404, "ADMIN_NOT_FOUND");
+      }
+      const profile = decryptJson(admin.encryptedAdmin);
+      const discordLinkedAt = new Date().toISOString();
+      const update = buildAdminProfileUpdate(
+        { ...profile, discordLinkedAt },
+        discordId,
+        guildId
+      );
+      await Admin.updateOne({ _id: admin._id }, { $set: update });
+      await PendingToken.deleteOne({ token });
+      return res.json({
+        ok: true,
+        user: pickBotAdminResponse(
+          { ...profile, discordId, guildId, discordLinkedAt },
+          { ...admin.toObject(), ...update }
+        )
+      });
+    }
+
     const encryptedUpdate = buildEncryptedUserUpdate(userData, discordId, guildId);
     const userFilter = await resolveDiscordLinkTarget(encryptedUpdate);
 
@@ -1426,7 +1549,7 @@ app.post("/api/verify", requireBotAuth, async (req, res) => {
 
     await PendingToken.deleteOne({ token });
 
-    res.json({ ok: true, user: pickUserResponse(userData, linkedUser) });
+    res.json({ ok: true, user: pickBotUserResponse(userData, linkedUser) });
   } catch (e) {
     if (e?.code === 11000) {
       return res.status(409).json({ error: "USER_ID_DUPLICATE", message: "이미 사용 중인 회원 ID입니다." });
@@ -1439,11 +1562,24 @@ app.post("/api/verify", requireBotAuth, async (req, res) => {
 app.post("/api/discord/unlink", requireBotAuth, async (req, res) => {
   try {
     const discordId = String(req.body?.discordId || "").trim();
-    if (!discordId) return res.status(400).json({ error: "DISCORDID_REQUIRED" });
+    if (!discordId) return sendError(res, 400, "DISCORDID_REQUIRED");
 
     const discordIdHash = hashLookup("discordId", discordId);
     const user = await User.findOne({ discordIdHash });
-    if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
+    if (!user) {
+      const admin = await Admin.findOne({ discordIdHash });
+      if (!admin?.encryptedAdmin) return sendError(res, 404, "USER_NOT_FOUND");
+      const adminProfile = decryptJson(admin.encryptedAdmin);
+      const update = buildAdminDiscordUnlinkUpdate(adminProfile);
+      await Admin.updateOne(
+        { _id: admin._id },
+        {
+          $set: update,
+          $unset: { discordIdHash: "" }
+        }
+      );
+      return res.json({ ok: true });
+    }
 
     const profile = decryptJson(user.encryptedProfile);
     const cleanedProfile = {
@@ -1471,17 +1607,22 @@ app.post("/api/discord/unlink", requireBotAuth, async (req, res) => {
   }
 });
 
-app.get("/api/user/:discordId", async (req, res) => {
+app.get("/api/user/:discordId", requireBotAuth, async (req, res) => {
   try {
     const discordId = String(req.params.discordId || "").trim();
-    if (!discordId) return res.status(400).json({ error: "DISCORDID_REQUIRED" });
+    if (!discordId) return sendError(res, 400, "DISCORDID_REQUIRED");
 
     const discordIdHash = hashLookup("discordId", discordId);
     const user = await User.findOne({ discordIdHash });
-    if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
+    if (!user) {
+      const admin = await Admin.findOne({ discordIdHash });
+      if (!admin?.encryptedAdmin) return sendError(res, 404, "USER_NOT_FOUND");
+      const adminProfile = decryptJson(admin.encryptedAdmin);
+      return res.json(pickBotAdminResponse(adminProfile, admin));
+    }
 
     const profile = decryptJson(user.encryptedProfile);
-    res.json(pickUserResponse(profile, user));
+    res.json(pickBotUserResponse(profile, user));
   } catch (e) {
     res.status(500).json({ error: "USER_FETCH_ERROR", message: e.message });
   }
@@ -1515,6 +1656,27 @@ app.get("/api/admin/me", requireAdminAuth, async (req, res) => {
     res.json({ ok: true, admin: pickAdminResponse(profile, admin) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.code || "ADMIN_ME_ERROR", message: err.message });
+  }
+});
+
+app.post("/api/admin/discord-token", requireAdminAuth, async (req, res) => {
+  try {
+    const admin = req.admin?.doc || await Admin.findOne({ adminIdHash: hashLookup("adminId", req.admin?.id || "") });
+    if (!admin?.encryptedAdmin) return res.status(404).json({ error: "ADMIN_NOT_FOUND" });
+    const profile = decryptJson(admin.encryptedAdmin);
+    const adminId = normalizeUserId(profile.adminId || req.admin?.id);
+    if (!adminId) return res.status(400).json({ error: "ADMIN_ID_REQUIRED" });
+    const { token, expiresAt } = await createPendingToken({
+      accountType: "admin",
+      adminId,
+      displayName: profile.displayName || adminId,
+      role: profile.role || "admin",
+      createdAt: profile.createdAt || admin.createdAt,
+      tokenReissuedAt: new Date().toISOString()
+    });
+    res.json({ ok: true, token, expiresAt });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.code || "ADMIN_TOKEN_ERROR", message: err.message });
   }
 });
 
@@ -1647,7 +1809,7 @@ app.get("/api/dailyTimetable", async (req, res) => {
     });
 
     const payload = await fetchJson(url);
-    res.json(mapTimetableRows(getNeisRows(payload, dataset)));
+    res.json(mapTimetableRows(getNeisRows(payload, dataset)).map(row => ({ ...row, date: row.date || date })));
   } catch (err) {
     res.status(500).json({ error: "NEIS_ERROR", message: err.message });
   }
@@ -1686,9 +1848,9 @@ app.get("/api/dailyMeal", async (req, res) => {
   if (!requireApiKey(res)) return;
   try {
     const { schoolCode, officeCode } = pickQuery(req, ["schoolCode", "officeCode"]);
-    if (!schoolCode || !officeCode) return res.json({ menu: "" });
-
     const date = toKstDateKey();
+    if (!schoolCode || !officeCode) return res.json({ date, menu: "" });
+
     const url = buildNeisUrl("mealServiceDietInfo", {
       ATPT_OFCDC_SC_CODE: officeCode,
       SD_SCHUL_CODE: schoolCode,
@@ -1697,7 +1859,7 @@ app.get("/api/dailyMeal", async (req, res) => {
 
     const payload = await fetchJson(url);
     const row = payload?.mealServiceDietInfo?.[1]?.row?.[0];
-    res.json({ menu: row?.DDISH_NM || "" });
+    res.json({ date, menu: row?.DDISH_NM || "" });
   } catch (err) {
     res.status(500).json({ error: "NEIS_ERROR", message: err.message });
   }

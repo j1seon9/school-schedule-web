@@ -9,6 +9,7 @@ const classSearchBtnEl = qs("classSearchBtn");
 const dateSearchBtnEl = qs("dateSearchBtn");
 let ownerUserId = "example_admin";
 const LOGIN_USER_KEY = "schoolBotLoginUser";
+const ADMIN_STORAGE_KEY = "admin.credentials.v1";
 const REGISTER_DRAFT_KEY = "schoolBotRegisterDraft";
 
 // ── Login-aware navigation ────────────────────────────────
@@ -37,21 +38,75 @@ function readLoggedInUser() {
   }
 }
 
+function readAdminSession() {
+  try {
+    const raw = sessionStorage.getItem(ADMIN_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const adminId = String(parsed?.id || parsed?.adminId || "").trim();
+    const adminToken = String(parsed?.adminToken || "").trim();
+    const password = String(parsed?.password || "");
+    if (!adminToken && (!adminId || !password)) return null;
+    return {
+      adminId,
+      adminToken,
+      password,
+      key: String(parsed?.key || "").trim(),
+      displayName: String(parsed?.displayName || adminId || "admin").trim(),
+      role: String(parsed?.role || "admin").trim(),
+      discordLinked: Boolean(parsed?.discordLinked)
+    };
+  } catch {
+    sessionStorage.removeItem(ADMIN_STORAGE_KEY);
+    return null;
+  }
+}
+
 function applyAuthUi() {
   const user = readLoggedInUser();
+  const admin = readAdminSession();
   const userId = String(user?.userId || "").trim();
+  const adminId = String(admin?.adminId || "").trim();
   const isLoggedIn = Boolean(user?.loggedInAt);
   const hasConfirmedUserId = isLoggedIn && Boolean(userId);
+  const hasAdminSession = Boolean(admin);
   const isOwner = userId === ownerUserId;
+  const shouldHideAuth = hasConfirmedUserId || hasAdminSession;
 
-  qs("loginNavLink")?.classList.toggle("hidden", hasConfirmedUserId);
-  qs("registerNavLink")?.classList.toggle("hidden", hasConfirmedUserId);
+  qs("loginNavLink")?.classList.toggle("hidden", shouldHideAuth);
+  qs("registerNavLink")?.classList.toggle("hidden", shouldHideAuth);
   qs("accountNavLink")?.classList.toggle("hidden", !hasConfirmedUserId);
-  qs("adminNavLink")?.classList.toggle("hidden", !isOwner);
+  qs("adminNavLink")?.classList.toggle("hidden", !(isOwner || hasAdminSession));
+  if (hasAdminSession) qs("adminNavLink")?.setAttribute("href", "/admin/account.html");
 
   const cardEl = qs("loginUserCard");
+  const labelEl = cardEl?.querySelector(".user-profile-label");
   const idEl = qs("loginUserId");
+  const roleEl = qs("loginUserRole");
+  const discordEl = qs("loginUserDiscord");
+  const adminActionsEl = qs("adminProfileActions");
+  if (hasAdminSession) {
+    cardEl?.classList.add("admin-profile-card");
+    if (labelEl) labelEl.textContent = "관리자 정보";
+    if (idEl) idEl.textContent = admin.displayName || adminId || "admin";
+    if (roleEl) {
+      roleEl.textContent = `Role : ${admin.role || "admin"}`;
+      roleEl.classList.remove("hidden");
+    }
+    if (discordEl) {
+      discordEl.textContent = `Discord : ${admin.discordLinked ? "연동됨" : "미연동"}`;
+      discordEl.classList.remove("hidden");
+    }
+    adminActionsEl?.classList.remove("hidden");
+    cardEl?.classList.remove("hidden");
+    return;
+  }
+  cardEl?.classList.remove("admin-profile-card");
+  if (labelEl) labelEl.textContent = "회원 정보";
   if (idEl) idEl.textContent = userId || "미설정";
+  roleEl?.classList.add("hidden");
+  discordEl?.classList.add("hidden");
+  adminActionsEl?.classList.add("hidden");
   cardEl?.classList.toggle("hidden", !hasConfirmedUserId);
 }
 
