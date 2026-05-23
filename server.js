@@ -333,7 +333,7 @@ app.use((req, res, next) => {
     "script-src 'self' https://www.gstatic.com https://www.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com",
+    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/",
     "frame-src 'self' https://*.firebaseapp.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/",
     "object-src 'none'",
     "base-uri 'self'",
