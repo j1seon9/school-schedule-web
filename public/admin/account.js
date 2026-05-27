@@ -25,11 +25,9 @@ function getSavedCredentials() {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed?.adminToken && (!parsed?.id || !parsed?.password)) return null;
+    if (!parsed?.adminToken) return null;
     return {
       id: String(parsed.id || "").trim(),
-      password: String(parsed.password || ""),
-      key: String(parsed.key || "").trim(),
       adminToken: String(parsed.adminToken || "").trim(),
       displayName: String(parsed.displayName || "").trim(),
       role: String(parsed.role || "admin").trim()
@@ -41,17 +39,17 @@ function getSavedCredentials() {
 }
 
 function saveCredentials(creds) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(creds));
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+    adminToken: creds.adminToken || "",
+    id: creds.id || "",
+    displayName: creds.displayName || "",
+    role: creds.role || "admin",
+    discordLinked: Boolean(creds.discordLinked)
+  }));
 }
 
 function buildAuthHeaders(creds) {
-  if (creds.adminToken) return { Authorization: `Bearer ${creds.adminToken}` };
-  const headers = {
-    "x-admin-id": creds.id,
-    "x-admin-password": creds.password
-  };
-  if (creds.key) headers["x-admin-key"] = creds.key;
-  return headers;
+  return { Authorization: `Bearer ${creds.adminToken}` };
 }
 
 function formatDate(value) {

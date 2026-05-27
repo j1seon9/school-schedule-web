@@ -46,11 +46,9 @@ function getSavedCredentials() {
 
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed?.adminToken && (!parsed?.id || !parsed?.password)) return null;
+    if (!parsed?.adminToken) return null;
     return {
       id: String(parsed.id || "").trim(),
-      password: String(parsed.password || ""),
-      key: String(parsed.key || "").trim(),
       adminToken: String(parsed.adminToken || "").trim(),
       displayName: String(parsed.displayName || "").trim(),
       role: String(parsed.role || "admin").trim()
@@ -61,7 +59,13 @@ function getSavedCredentials() {
 }
 
 function saveCredentials(creds) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(creds));
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+    adminToken: creds.adminToken || "",
+    id: creds.id || "",
+    displayName: creds.displayName || "",
+    role: creds.role || "admin",
+    discordLinked: Boolean(creds.discordLinked)
+  }));
 }
 
 function clearCredentials() {
@@ -79,8 +83,6 @@ function getInputCredentials() {
 function fillInputs(creds) {
   if (!creds) return;
   if (adminIdInputEl) adminIdInputEl.value = creds.id || "";
-  if (adminPasswordInputEl) adminPasswordInputEl.value = creds.password || "";
-  if (adminKeyInputEl) adminKeyInputEl.value = creds.key || "";
 }
 
 function isLoggedIn() {
@@ -95,20 +97,18 @@ function updateAuthUi(loggedIn) {
 }
 
 function buildAuthHeaders(creds) {
-  if (creds.adminToken) {
-    return { Authorization: `Bearer ${creds.adminToken}` };
-  }
-  const headers = {
-    "x-admin-id": creds.id,
-    "x-admin-password": creds.password
-  };
-  if (creds.key) headers["x-admin-key"] = creds.key;
-  return headers;
+  return { Authorization: `Bearer ${creds.adminToken}` };
 }
 
 async function verifyCredentials(creds) {
-  const response = await fetch("/admin/monitor", {
-    headers: buildAuthHeaders(creds)
+  const response = await fetch("/api/admin/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      adminId: creds.id,
+      password: creds.password,
+      key: creds.key
+    })
   });
 
   if (response.status === 401) {
@@ -121,6 +121,13 @@ async function verifyCredentials(creds) {
     err.status = response.status;
     throw err;
   }
+  const data = await response.json().catch(() => ({}));
+  return {
+    id: data.admin?.adminId || creds.id,
+    displayName: data.admin?.displayName || data.admin?.adminId || creds.id,
+    role: data.admin?.role || "admin",
+    adminToken: data.adminToken || ""
+  };
 }
 
 async function adminFetch(url, options = {}) {
@@ -451,8 +458,9 @@ async function applyLogin() {
   }
 
   try {
-    await verifyCredentials(creds);
-    saveCredentials(creds);
+    const session = await verifyCredentials(creds);
+    if (!session?.adminToken) throw new Error("ADMIN_TOKEN_MISSING");
+    saveCredentials(session);
     updateAuthUi(true);
     await refreshDashboard();
     startAutoRefresh();

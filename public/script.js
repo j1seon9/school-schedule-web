@@ -45,13 +45,10 @@ function readAdminSession() {
     const parsed = JSON.parse(raw);
     const adminId = String(parsed?.id || parsed?.adminId || "").trim();
     const adminToken = String(parsed?.adminToken || "").trim();
-    const password = String(parsed?.password || "");
-    if (!adminToken && (!adminId || !password)) return null;
+    if (!adminToken) return null;
     return {
       adminId,
       adminToken,
-      password,
-      key: String(parsed?.key || "").trim(),
       displayName: String(parsed?.displayName || adminId || "admin").trim(),
       role: String(parsed?.role || "admin").trim(),
       discordLinked: Boolean(parsed?.discordLinked)

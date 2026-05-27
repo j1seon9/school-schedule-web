@@ -25,7 +25,12 @@ function getInputCredentials() {
 }
 
 function saveCredentials(creds) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(creds));
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+    adminToken: creds.adminToken || "",
+    id: creds.id || "",
+    displayName: creds.displayName || "",
+    role: creds.role || "admin"
+  }));
 }
 
 function clearCredentials() {
@@ -38,11 +43,9 @@ function getSavedCredentials() {
 
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed?.adminToken && (!parsed?.id || !parsed?.password)) return null;
+    if (!parsed?.adminToken) return null;
     return {
       id: String(parsed.id || "").trim(),
-      password: String(parsed.password || ""),
-      key: String(parsed.key || "").trim(),
       adminToken: String(parsed.adminToken || "").trim(),
       displayName: String(parsed.displayName || "").trim(),
       role: String(parsed.role || "admin").trim()
@@ -55,30 +58,28 @@ function getSavedCredentials() {
 function fillInputs(creds) {
   if (!creds) return;
   if (adminIdInputEl) adminIdInputEl.value = creds.id || "";
-  if (adminPasswordInputEl) adminPasswordInputEl.value = creds.password || "";
-  if (adminKeyInputEl) adminKeyInputEl.value = creds.key || "";
-}
-
-function buildAuthHeaders(creds) {
-  if (creds.adminToken) {
-    return { Authorization: `Bearer ${creds.adminToken}` };
-  }
-  const headers = {
-    "x-admin-id": creds.id,
-    "x-admin-password": creds.password
-  };
-  if (creds.key) headers["x-admin-key"] = creds.key;
-  return headers;
 }
 
 async function verifyCredentials(creds) {
-  const response = await fetch("/admin/monitor", {
-    headers: buildAuthHeaders(creds)
+  const response = await fetch("/api/admin/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      adminId: creds.id,
+      password: creds.password,
+      key: creds.key
+    })
   });
 
-  if (response.status === 401) return false;
+  if (response.status === 401) return null;
   if (!response.ok) throw new Error("AUTH_REQUEST_FAILED");
-  return true;
+  const data = await response.json().catch(() => ({}));
+  return {
+    id: data.admin?.adminId || creds.id,
+    displayName: data.admin?.displayName || data.admin?.adminId || creds.id,
+    role: data.admin?.role || "admin",
+    adminToken: data.adminToken || ""
+  };
 }
 
 function moveToStatus() {
@@ -112,13 +113,13 @@ async function applyLogin() {
 
   if (loginBtnEl) loginBtnEl.disabled = true;
   try {
-    const valid = await verifyCredentials(creds);
-    if (!valid) {
+    const session = await verifyCredentials(creds);
+    if (!session?.adminToken) {
       setMessage("인증 실패. 관리자 정보를 확인하세요.", "error");
       return;
     }
 
-    saveCredentials(creds);
+    saveCredentials(session);
     setMessage("인증 완료", "ok");
     moveToStatus();
   } catch {

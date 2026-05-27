@@ -1243,17 +1243,6 @@ app.post("/api/login/password", async (req, res) => {
       return res.status(400).json({ error: "PASSWORD_REQUIRED", message: "비밀번호를 입력해 주세요." });
     }
 
-    const adminAuth = await findAdminByCredentials(normalizedUserId, password);
-    if (adminAuth) {
-      return res.json({
-        ok: true,
-        role: "admin",
-        admin: pickAdminResponse(adminAuth.profile, adminAuth.admin),
-        adminToken: createAdminSessionToken(normalizedUserId),
-        redirectTo: "/admin/login.html"
-      });
-    }
-
     const user = await User.findOne({ userIdHash: hashLookup("userId", normalizedUserId) });
     if (!user?.encryptedProfile) {
       return res.status(404).json({ error: "USER_NOT_FOUND", message: "회원정보가 없습니다." });
@@ -1656,6 +1645,25 @@ app.get("/api/admin/me", requireAdminAuth, async (req, res) => {
     res.json({ ok: true, admin: pickAdminResponse(profile, admin) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.code || "ADMIN_ME_ERROR", message: err.message });
+  }
+});
+
+app.post("/api/admin/login", async (req, res) => {
+  try {
+    const adminId = normalizeUserId(req.body?.adminId);
+    const password = String(req.body?.password || "");
+    const key = String(req.body?.key || "").trim();
+    const keyValid = ADMIN_AUTH_KEY_REQUIRED ? safeEqualText(key, ADMIN_AUTH_KEY) : true;
+    const adminAuth = keyValid ? await findAdminByCredentials(adminId, password) : null;
+    if (!adminAuth) return res.status(401).json({ error: "UNAUTHORIZED" });
+
+    res.json({
+      ok: true,
+      admin: pickAdminResponse(adminAuth.profile, adminAuth.admin),
+      adminToken: createAdminSessionToken(adminId)
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.code || "ADMIN_LOGIN_ERROR", message: err.message });
   }
 });
 

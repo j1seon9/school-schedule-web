@@ -108,30 +108,6 @@ function persistLoggedInUser(user, authToken = "") {
   }
 }
 
-function saveAdminCredentials(creds) {
-  sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(creds));
-}
-
-function buildAdminAuthHeaders(creds) {
-  const headers = {
-    "x-admin-id": creds.id,
-    "x-admin-password": creds.password
-  };
-  if (creds.key) headers["x-admin-key"] = creds.key;
-  return headers;
-}
-
-async function tryAdminLogin(userId, password) {
-  const creds = { id: userId, password, key: "" };
-  const response = await fetch("/admin/monitor", {
-    headers: buildAdminAuthHeaders(creds)
-  });
-  if (response.status === 401) return false;
-  if (!response.ok) throw new Error("ADMIN_AUTH_REQUEST_FAILED");
-  saveAdminCredentials(creds);
-  return true;
-}
-
 async function finishLogin(idToken) {
   hideMissingUser();
   setLoginStatus("회원정보를 확인하는 중입니다...");
