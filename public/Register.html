@@ -103,18 +103,18 @@
         <div class="reg-phone-box" id="firebaseRegisterFields">
           <label class="reg-label">인증 방법</label>
           <button class="reg-btn reg-btn-outline reg-google-btn" id="googleAuthBtn" type="button" onclick="signInWithGoogle()" disabled>Google로 인증하기</button>
-          <div class="reg-auth-divider">또는 SMS 인증</div>
+          <div class="reg-auth-divider">또는 SMS 인증(현재 지원 안함)</div>
           <label class="reg-label" for="phoneNumber">휴대폰 번호 인증(해당 웹은 포트폴리오 용으로 SMS인증을 지원하지 않습니다.)</label>
           <div class="reg-search-row">
             <input id="phoneNumber" type="tel" class="reg-input" value="010-0000-0000" placeholder="010-0000-0000" autocomplete="tel">
-            <button class="reg-btn reg-btn-outline" id="sendPhoneBtn" type="button" onclick="sendPhoneCode()">인증 문자 받기</button>
+            <button class="reg-btn reg-btn-outline" id="sendPhoneBtn" type="button" onclick="sendPhoneCode()" disabled>인증 문자 받기</button>
           </div>
           <div id="recaptchaContainer" class="reg-recaptcha"></div>
           <div class="reg-search-row">
             <input id="phoneCode" type="text" class="reg-input" placeholder="인증번호 6자리" inputmode="numeric" autocomplete="one-time-code">
             <button class="reg-btn reg-btn-outline" id="confirmPhoneBtn" type="button" onclick="confirmPhoneCode()" disabled>인증 확인</button>
           </div>
-          <div class="reg-phone-status" id="phoneStatus">ID/비밀번호만으로 가입하거나 SMS/Google 인증을 추가로 완료할 수 있습니다.</div>
+          <div class="reg-phone-status" id="phoneStatus">ID/비밀번호만으로 가입하거나 SMS(지원 안함)/Google 인증을 추가로 완료할 수 있습니다.</div>
         </div>
 
         <div class="reg-agree-row">
