@@ -483,6 +483,13 @@ function pickAdminResponse(profile = {}, doc = {}) {
     adminId: normalizeUserId(profile.adminId),
     displayName: profile.displayName || profile.adminId || "",
     role: profile.role || doc.role || "admin",
+    schoolCode: profile.schoolCode || "",
+    officeCode: profile.officeCode || "",
+    schoolName: profile.schoolName || "",
+    officeName: profile.officeName || "",
+    type: profile.type || "",
+    grade: profile.grade || "",
+    classNo: profile.classNo || "",
     discordLinked: Boolean(profile.discordId || doc.discordIdHash),
     discordLinkedAt: firstDateText(profile.discordLinkedAt, profile.updatedAt, doc.updatedAt),
     createdAt: firstDateText(profile.createdAt, doc.createdAt),
@@ -807,12 +814,38 @@ function pickBotAdminResponse(profile = {}, doc = {}) {
     userId: admin.adminId,
     displayName: admin.displayName || admin.adminId,
     role: admin.role,
+    schoolCode: admin.schoolCode,
+    officeCode: admin.officeCode,
+    schoolName: admin.schoolName,
+    officeName: admin.officeName,
+    type: admin.type,
+    grade: admin.grade,
+    classNo: admin.classNo,
     serviceJoinedAt: firstDateText(profile.serviceJoinedAt, profile.createdAt, doc.createdAt, profile.updatedAt, doc.updatedAt),
     createdAt: admin.createdAt,
     updatedAt: admin.updatedAt,
     discordLinkedAt: admin.discordLinkedAt,
     discordLinked: admin.discordLinked
   };
+}
+
+function normalizeSchoolSettings(body = {}) {
+  const settings = {
+    schoolCode: String(body.schoolCode || "").trim(),
+    officeCode: String(body.officeCode || "").trim(),
+    schoolName: String(body.schoolName || "").trim(),
+    officeName: String(body.officeName || "").trim(),
+    type: String(body.type || "").trim(),
+    grade: String(body.grade || "").trim(),
+    classNo: String(body.classNo || "").trim()
+  };
+  if (!settings.schoolCode || !settings.officeCode || !settings.schoolName || !settings.grade || !settings.classNo) {
+    throw httpError(400, "MISSING_REQUIRED_FIELDS", "학교, 학년, 반 정보를 모두 입력해 주세요.");
+  }
+  if (!/^\d+$/.test(settings.grade) || Number(settings.grade) < 1 || !/^\d+$/.test(settings.classNo) || Number(settings.classNo) < 1) {
+    throw httpError(400, "SCHOOL_CLASS_INVALID", "학년과 반은 1 이상의 숫자로 입력해 주세요.");
+  }
+  return settings;
 }
 
 function normalizeFavorites(list) {
@@ -1645,6 +1678,23 @@ app.get("/api/admin/me", requireAdminAuth, async (req, res) => {
     res.json({ ok: true, admin: pickAdminResponse(profile, admin) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.code || "ADMIN_ME_ERROR", message: err.message });
+  }
+});
+
+app.put("/api/admin/school", requireAdminAuth, async (req, res) => {
+  try {
+    const admin = req.admin?.doc || await Admin.findOne({ adminIdHash: hashLookup("adminId", req.admin?.id || "") });
+    if (!admin?.encryptedAdmin) return res.status(404).json({ error: "ADMIN_NOT_FOUND" });
+    const profile = decryptJson(admin.encryptedAdmin);
+    const nextProfile = { ...profile, ...normalizeSchoolSettings(req.body) };
+    const update = buildAdminProfileUpdate(nextProfile, profile.discordId || "", profile.guildId || "");
+    await Admin.updateOne({ _id: admin._id }, { $set: update });
+    res.json({
+      ok: true,
+      admin: pickAdminResponse({ ...nextProfile, updatedAt: update.updatedAt }, { ...admin.toObject(), ...update })
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.code || "ADMIN_SCHOOL_UPDATE_ERROR", message: err.message });
   }
 });
 

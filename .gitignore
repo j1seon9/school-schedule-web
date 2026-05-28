@@ -4,3 +4,4 @@ package-lock.json
 server-start.log
 server-error.log
 server.pid
+.vscode/

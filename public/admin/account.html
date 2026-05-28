@@ -41,6 +41,31 @@
     </section>
 
     <section class="panel admin-account-panel">
+      <h2>학교 정보</h2>
+      <div class="admin-school-form">
+        <label for="adminSchoolInput">학교 이름</label>
+        <div class="row">
+          <input id="adminSchoolInput" type="text" placeholder="학교 이름" autocomplete="off">
+          <button id="searchAdminSchoolBtn" type="button">검색</button>
+        </div>
+        <ul class="admin-school-results" id="adminSchoolResults" hidden></ul>
+        <div class="admin-school-selected" id="adminSelectedSchool">선택된 학교 없음</div>
+        <div class="admin-school-fields">
+          <label for="adminGrade">학년
+            <input id="adminGrade" type="number" placeholder="학년" min="1">
+          </label>
+          <label for="adminClassNo">반
+            <input id="adminClassNo" type="number" placeholder="반" min="1">
+          </label>
+        </div>
+        <div class="row">
+          <button id="saveAdminSchoolBtn" type="button">학교 정보 저장</button>
+        </div>
+      </div>
+      <p id="adminSchoolMessage"></p>
+    </section>
+
+    <section class="panel admin-account-panel">
       <h2>Discord 연동</h2>
       <p class="admin-help">토큰을 발급한 뒤 Discord 봇의 로그인 명령어에 입력하면 관리자 Discord 계정으로 연결됩니다.</p>
       <div class="row">

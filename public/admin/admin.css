@@ -55,6 +55,7 @@ body {
 .auth-grid input,
 .auth-grid button,
 #noticeInput,
+.admin-school-form input,
 .row button {
   border: 1px solid #334155;
   border-radius: 8px;
@@ -64,12 +65,14 @@ body {
 }
 
 .auth-grid button,
+.admin-school-results button,
 .row button {
   background: #1d4ed8;
   cursor: pointer;
 }
 
 .auth-grid button:hover,
+.admin-school-results button:hover,
 .row button:hover {
   filter: brightness(1.1);
 }
@@ -81,6 +84,7 @@ body {
 #authMessage,
 #noticeMessage,
 #adminAccountMessage,
+#adminSchoolMessage,
 #adminDiscordMessage,
 #ddosMeta {
   margin: 10px 0 0;
@@ -91,6 +95,7 @@ body {
 #authMessage.error,
 #noticeMessage.error,
 #adminAccountMessage.error,
+#adminSchoolMessage.error,
 #adminDiscordMessage.error {
   color: #fca5a5;
 }
@@ -98,6 +103,7 @@ body {
 #authMessage.ok,
 #noticeMessage.ok,
 #adminAccountMessage.ok,
+#adminSchoolMessage.ok,
 #adminDiscordMessage.ok {
   color: #86efac;
 }
@@ -185,6 +191,60 @@ body {
 .admin-help {
   color: #94a3b8;
   line-height: 1.5;
+}
+
+.admin-school-form label {
+  display: block;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.admin-school-form .row input {
+  flex: 1;
+  min-width: 180px;
+}
+
+.admin-school-results {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 0;
+}
+
+.admin-school-results[hidden] {
+  display: none;
+}
+
+.admin-school-results button {
+  display: block;
+  width: 100%;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #e2e8f0;
+  text-align: left;
+}
+
+.admin-school-selected {
+  margin-top: 10px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #e2e8f0;
+}
+
+.admin-school-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.admin-school-fields input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
 }
 
 .admin-token-box {
@@ -284,7 +344,8 @@ body {
   }
 
   .admin-account-list div,
-  .admin-token-box {
+  .admin-token-box,
+  .admin-school-fields {
     grid-template-columns: 1fr;
   }
 }
