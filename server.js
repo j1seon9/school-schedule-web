@@ -9,6 +9,8 @@ import path from "path";
 import { createCipheriv, createDecipheriv, createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "crypto";
 import { fileURLToPath } from "url";
 import mongoose from "mongoose";
+import { dirname } from "path"; 
+import fs from "fs";
 
 dotenv.config();
 mongoose.set("strictQuery", true);
@@ -1969,5 +1971,20 @@ startBackgroundServices();
 // ──────────────────────────discord bot invite────────────────────────────
 // /invite 경로로 접속 시 invite.html 파일을 전송하는 라우트 추가
 app.get("/invite", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "invite.html"));
+  // 환경변수에서 가져오기
+  const inviteUrl = process.env.BOT_INVITE_URL;
+  
+  if (!inviteUrl) {
+    return res.status(500).send("초대 링크가 설정되지 않았습니다.");
+  }
+
+  const filePath = path.join(__dirname, "public", "invite.html");
+  
+  fs.readFile(filePath, "utf8", (err, data) => {
+    if (err) return res.status(500).send("파일을 읽을 수 없습니다.");
+    
+    // 원본 파일 내용을 유지한 채, 전송할 때만 링크로 변경
+    const updatedHtml = data.replace(/BOT_INVITE_URL/g, inviteUrl);
+    res.type("html").send(updatedHtml);
+  });
 });
