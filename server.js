@@ -15,6 +15,17 @@ import fs from "fs";
 dotenv.config();
 mongoose.set("strictQuery", true);
 
+// ── Process-level safety net ──────────────────────────────
+// These do NOT replace proper try/catch in route handlers/middleware,
+// but they prevent a single missed rejection from killing the whole
+// process while we hunt down the real cause.
+process.on("unhandledRejection", (reason) => {
+  console.error("[UNHANDLED REJECTION]", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[UNCAUGHT EXCEPTION]", err);
+});
+
 // ── Runtime configuration ─────────────────────────────────
 
 const API_KEY     = (process.env.API_KEY     || "").trim();
@@ -295,7 +306,7 @@ async function initDb() {
 mongoose.connection.on("disconnected", () => {
   dbConnected = false;
   console.warn("⚠️ MongoDB disconnected → trying to reconnect...");
-  initDb();
+  initDb().catch(e => console.error(`MongoDB reconnect failed: ${e.message}`));
 });
 
 mongoose.connection.on("connected", () => {
@@ -606,30 +617,44 @@ async function ensureDefaultAdmin() {
   console.log("Default admin account saved to MongoDB");
 }
 
+// ── FIX: the entire body is now wrapped in try/catch.
+// Previously, the second half of this function (findAdminByCredentials,
+// which calls hashLookup/decryptJson) was NOT inside any try/catch.
+// Since this is an async function used directly as Express middleware,
+// any rejection here became an "unhandled promise rejection" — and
+// Node's default behavior since v15 is to crash the entire process on
+// an unhandled rejection. That is almost certainly what was killing
+// the server (e.g. on a transient DB hiccup, or a corrupt/changed
+// DATA_ENCRYPTION_KEY).
 async function requireAdminAuth(req, res, next) {
-  const bearerToken = getBearerToken(req);
-  if (bearerToken) {
-    try {
-      const adminId = verifyAdminSessionToken(bearerToken);
-      const admin = await Admin.findOne({ adminIdHash: hashLookup("adminId", adminId) });
-      if (admin) {
-        req.admin = { id: adminId, doc: admin };
-        return next();
+  try {
+    const bearerToken = getBearerToken(req);
+    if (bearerToken) {
+      try {
+        const adminId = verifyAdminSessionToken(bearerToken);
+        const admin = await Admin.findOne({ adminIdHash: hashLookup("adminId", adminId) });
+        if (admin) {
+          req.admin = { id: adminId, doc: admin };
+          return next();
+        }
+      } catch {
+        // Fall through to legacy header auth below.
       }
-    } catch {
-      // Fall through to legacy header auth below.
     }
-  }
 
-  const id       = String(req.get("x-admin-id")       || "").trim();
-  const password = String(req.get("x-admin-password") || "");
-  const key      = String(req.get("x-admin-key")      || "").trim();
-  const keyValid = ADMIN_AUTH_KEY_REQUIRED ? safeEqualText(key, ADMIN_AUTH_KEY) : true;
-  const adminAuth = keyValid ? await findAdminByCredentials(id, password) : null;
-  const envValid = keyValid && safeEqualText(id, ADMIN_ID) && safeEqualText(password, ADMIN_PASSWORD);
-  if (!adminAuth && !envValid) return res.status(401).json({ error: "UNAUTHORIZED" });
-  req.admin = { id: normalizeUserId(id), doc: adminAuth?.admin || null };
-  return next();
+    const id       = String(req.get("x-admin-id")       || "").trim();
+    const password = String(req.get("x-admin-password") || "");
+    const key      = String(req.get("x-admin-key")      || "").trim();
+    const keyValid = ADMIN_AUTH_KEY_REQUIRED ? safeEqualText(key, ADMIN_AUTH_KEY) : true;
+    const adminAuth = keyValid ? await findAdminByCredentials(id, password) : null;
+    const envValid = keyValid && safeEqualText(id, ADMIN_ID) && safeEqualText(password, ADMIN_PASSWORD);
+    if (!adminAuth && !envValid) return res.status(401).json({ error: "UNAUTHORIZED" });
+    req.admin = { id: normalizeUserId(id), doc: adminAuth?.admin || null };
+    return next();
+  } catch (e) {
+    console.error("[requireAdminAuth] unexpected error:", e.message);
+    return res.status(500).json({ error: "ADMIN_AUTH_ERROR", message: e.message });
+  }
 }
 
 function requireBotAuth(req, res, next) {
