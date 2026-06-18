@@ -1964,3 +1964,10 @@ function startBackgroundServices() {
 
 startHttpServer();
 startBackgroundServices();
+
+
+// ──────────────────────────discord bot invite────────────────────────────
+// /invite 경로로 접속 시 invite.html 파일을 전송하는 라우트 추가
+app.get("/invite", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "invite.html"));
+});
